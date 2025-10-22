@@ -60,6 +60,10 @@ textarea{resize:vertical;min-height:64px;}
     100% { opacity: 1; }
 }
 
+/* Tela de cadastro */
+#telaCadastro{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,var(--bg1),var(--bg2));z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;}
+.cadastroCard{width:100%;max-width:400px;background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;backdrop-filter: blur(10px);}
+
 /* small screens adjustments */
 @media (max-width:420px){
   .row{flex-direction:column;}
@@ -69,11 +73,34 @@ textarea{resize:vertical;min-height:64px;}
 </head>
 <body>
 
+<!-- Tela de Cadastro (aparece apenas uma vez) -->
+<div id="telaCadastro">
+  <div class="cadastroCard">
+    <h2 style="text-align:center;margin-bottom:20px;">Cadastro do Colaborador</h2>
+    <div class="field">
+      <label for="cadastroNome">Nome completo</label>
+      <input type="text" id="cadastroNome" placeholder="Seu nome completo" />
+    </div>
+    <div class="field">
+      <label for="cadastroCargo">Cargo / Função</label>
+      <input type="text" id="cadastroCargo" placeholder="Ex.: Zelador" />
+    </div>
+    <div class="field">
+      <label for="cadastroTelefone">Telefone WhatsApp</label>
+      <input type="text" id="cadastroTelefone" placeholder="Ex: 5531999999999" />
+    </div>
+    <button onclick="salvarCadastro()" style="width:100%;padding:12px;background:#00c853;color:white;border:none;border-radius:8px;font-weight:700;margin-top:15px;cursor:pointer;">
+      SALVAR CADASTRO
+    </button>
+  </div>
+</div>
+
 <div id="menuBtn" title="Menu">&#9776;</div>
 <div id="menuOptions" aria-hidden="true">
   <button onclick="mostrarPontoDia()">Ponto do Dia</button>
   <button onclick="mostrarPontoMes()">Ponto do Mês</button>
   <button onclick="abrirJustificativa()">Falta/Atraso</button>
+  <button onclick="editarCadastro()">Editar Cadastro</button>
 </div>
 
 <div class="header">
@@ -86,12 +113,12 @@ textarea{resize:vertical;min-height:64px;}
 
     <div class="row" style="margin-bottom:8px;">
       <div class="field" style="flex:1">
-        <label for="nomeUsuario">Nome do colaborador</label>
-        <input id="nomeUsuario" type="text" placeholder="Seu nome completo" />
+        <label>Nome do colaborador</label>
+        <input type="text" id="nomeUsuario" readonly style="background:rgba(255,255,255,0.1);" />
       </div>
       <div class="field" style="width:150px;">
-        <label for="cargoUsuario">Cargo / Função</label>
-        <input id="cargoUsuario" type="text" placeholder="Ex.: Zelador" />
+        <label>Cargo / Função</label>
+        <input type="text" id="cargoUsuario" readonly style="background:rgba(255,255,255,0.1);" />
       </div>
     </div>
 
@@ -110,11 +137,12 @@ textarea{resize:vertical;min-height:64px;}
 
     <div class="statusBar" id="statusBar">
       <div>Pontos Hoje: <span id="pontosHojeCount">0/8</span></div>
-      <div>Pendentes: <span id="pendCount" class="pendentes">0</span></div>
+      <div>Próximo ponto em: <span id="tempoRestante">--:--</span></div>
       <img id="lastThumb" class="thumbnail" style="display:none" alt="thumb">
     </div>
 
     <div id="warnGPS" class="warn" style="display:none"></div>
+    <div id="warnTempo" class="warn" style="display:none"></div>
   </div>
 
   <div id="visualizacaoPontos" style="width:100%;max-width:480px;margin-top:12px;"></div>
@@ -122,7 +150,6 @@ textarea{resize:vertical;min-height:64px;}
 
 <div class="rodape">
   © LCSoftware Ltda
-  <div id="alterarNumeroDiv"><button onclick="alterarNumero()">Alterar Número</button></div>
 </div>
 
 <!-- Modal Justificativa -->
@@ -137,9 +164,6 @@ textarea{resize:vertical;min-height:64px;}
   </div>
 </div>
 
-<!-- Input frontal selfie SEM opção de virar câmera -->
-<input type="file" accept="image/*" capture="user" id="inputSelfie" style="display:none">
-
 <!-- Toast container -->
 <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
@@ -147,14 +171,16 @@ textarea{resize:vertical;min-height:64px;}
 /* ============================
    CONFIGURAÇÃO DO FORMSPREE ATUALIZADA
    ============================ */
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv'; // NOVO ENDPOINT CORRETO
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv';
 
 /* ============================
    Variáveis e elementos
    ============================ */
-const KEY_PONTOS_DIA = 'pontosDia_v6';
+const KEY_PONTOS_DIA = 'pontosDia_v7';
+const KEY_CADASTRO = 'cadastroUsuario_v1';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
+const TEMPO_MINIMO_ENTRE_PONTOS = 90 * 60 * 1000; // 1 hora e 30 minutos em milissegundos
 
 const nomeUsuarioEl = document.getElementById('nomeUsuario');
 const cargoUsuarioEl = document.getElementById('cargoUsuario');
@@ -163,18 +189,72 @@ const mensagemConfirmacao = document.getElementById('mensagemConfirmacao');
 const botao = document.getElementById('baterPontoBtn');
 const relogioEl = document.getElementById('relogio');
 const visualizacaoPontos = document.getElementById('visualizacaoPontos');
-const inputSelfie = document.getElementById('inputSelfie');
 const pendCountEl = document.getElementById('pendCount');
 const pontosHojeCountEl = document.getElementById('pontosHojeCount');
+const tempoRestanteEl = document.getElementById('tempoRestante');
 const warnGPS = document.getElementById('warnGPS');
+const warnTempo = document.getElementById('warnTempo');
 const lastThumb = document.getElementById('lastThumb');
 const toastContainer = document.getElementById('toastContainer');
+const telaCadastro = document.getElementById('telaCadastro');
 
 let pontosDia = [];
 let db = null;
 let dbReadyPromise = null;
-let numeroWhatsApp = localStorage.getItem('numeroWhatsApp');
-let numeroAlterado = localStorage.getItem('numeroAlterado');
+let usuarioCadastrado = null;
+let ultimoPontoTimestamp = null;
+let tempoRestanteInterval = null;
+
+/* ============================
+   Sistema de Cadastro
+   ============================ */
+function verificarCadastro() {
+  const cadastroSalvo = localStorage.getItem(KEY_CADASTRO);
+  if (cadastroSalvo) {
+    usuarioCadastrado = JSON.parse(cadastroSalvo);
+    nomeUsuarioEl.value = usuarioCadastrado.nome;
+    cargoUsuarioEl.value = usuarioCadastrado.cargo;
+    telaCadastro.style.display = 'none';
+  } else {
+    telaCadastro.style.display = 'flex';
+  }
+}
+
+function salvarCadastro() {
+  const nome = document.getElementById('cadastroNome').value.trim();
+  const cargo = document.getElementById('cadastroCargo').value.trim();
+  const telefone = document.getElementById('cadastroTelefone').value.trim();
+
+  if (!nome || !cargo || !telefone) {
+    showToast('Preencha todos os campos', 'error', 3000);
+    return;
+  }
+
+  if (!/^\d{12,15}$/.test(telefone)) {
+    showToast('Telefone inválido. Use apenas números (ex: 5531999999999)', 'error', 4000);
+    return;
+  }
+
+  usuarioCadastrado = {
+    nome: nome,
+    cargo: cargo,
+    telefone: telefone,
+    dataCadastro: new Date().toISOString()
+  };
+
+  localStorage.setItem(KEY_CADASTRO, JSON.stringify(usuarioCadastrado));
+  nomeUsuarioEl.value = nome;
+  cargoUsuarioEl.value = cargo;
+  telaCadastro.style.display = 'none';
+  
+  showToast('Cadastro salvo com sucesso!', 'success', 3000);
+}
+
+function editarCadastro() {
+  localStorage.removeItem(KEY_CADASTRO);
+  usuarioCadastrado = null;
+  verificarCadastro();
+}
 
 /* ============================
    Toast helper
@@ -210,7 +290,9 @@ function openDB(){
   });
   return dbReadyPromise;
 }
+
 async function getDB(){ if(db) return db; return await openDB(); }
+
 async function addPendingToDB(pendingObj){
   const idb = await getDB();
   return new Promise((resolve,reject)=>{
@@ -229,6 +311,7 @@ async function addPendingToDB(pendingObj){
     };
   });
 }
+
 async function getAllPendingFromDB(){
   const idb = await getDB();
   return new Promise((resolve,reject)=>{
@@ -239,6 +322,7 @@ async function getAllPendingFromDB(){
     req.onerror = (e)=> reject(e.target.error);
   });
 }
+
 async function deletePendingFromDB(id){
   const idb = await getDB();
   return new Promise((resolve,reject)=>{
@@ -258,23 +342,10 @@ function carregarLocalStorage(){
     const raw = localStorage.getItem(KEY_PONTOS_DIA);
     pontosDia = raw ? JSON.parse(raw) : [];
     atualizarContadorPontosHoje();
+    verificarUltimoPonto();
   }catch(e){ pontosDia = []; }
   atualizarVisualizacaoResumo();
 }
-carregarLocalStorage();
-openDB().then(()=>{ atualizarPendCount(); sincronizarPontosPendentes(); }).catch(err=>console.warn('Erro abrir DB:', err));
-
-/* solicita número whatsapp se não houver */
-if(!numeroWhatsApp){
-  const input = prompt("Informe seu número do WhatsApp (somente números, ex: 5531999999999):");
-  if(input && /^\d{12,15}$/.test(input)){
-    numeroWhatsApp = input;
-    localStorage.setItem('numeroWhatsApp',numeroWhatsApp);
-  } else {
-    if(input) alert("Número inválido. Será solicitado novamente no próximo acesso.");
-  }
-}
-if(numeroAlterado==='sim'){ document.getElementById('alterarNumeroDiv').style.display='none'; }
 
 /* ============================
    Relógio
@@ -287,9 +358,78 @@ setInterval(atualizarRelogio,1000);
 atualizarRelogio();
 
 /* ============================
+   Sistema de tempo entre pontos (1h30min)
+   ============================ */
+function verificarUltimoPonto() {
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const pontosHoje = pontosDia.filter(p => p.data === hoje);
+  
+  if (pontosHoje.length > 0) {
+    const ultimoPonto = pontosHoje[pontosHoje.length - 1];
+    ultimoPontoTimestamp = new Date(ultimoPonto.timestamp).getTime();
+    iniciarContadorTempo();
+  } else {
+    ultimoPontoTimestamp = null;
+    tempoRestanteEl.textContent = 'Pronto';
+    warnTempo.style.display = 'none';
+  }
+}
+
+function iniciarContadorTempo() {
+  if (tempoRestanteInterval) {
+    clearInterval(tempoRestanteInterval);
+  }
+
+  tempoRestanteInterval = setInterval(() => {
+    if (!ultimoPontoTimestamp) {
+      tempoRestanteEl.textContent = 'Pronto';
+      warnTempo.style.display = 'none';
+      botao.disabled = false;
+      return;
+    }
+
+    const agora = Date.now();
+    const tempoPassado = agora - ultimoPontoTimestamp;
+    const tempoRestante = TEMPO_MINIMO_ENTRE_PONTOS - tempoPassado;
+
+    if (tempoRestante <= 0) {
+      tempoRestanteEl.textContent = 'Pronto';
+      warnTempo.style.display = 'none';
+      botao.disabled = false;
+      clearInterval(tempoRestanteInterval);
+    } else {
+      const minutos = Math.floor(tempoRestante / 60000);
+      const segundos = Math.floor((tempoRestante % 60000) / 1000);
+      tempoRestanteEl.textContent = `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
+      
+      // Desabilita o botão se ainda não passou 1h30min
+      if (tempoRestante > 0) {
+        botao.disabled = true;
+        warnTempo.style.display = 'block';
+        warnTempo.innerHTML = `Aguarde ${minutos} minutos para o próximo ponto`;
+      }
+    }
+  }, 1000);
+}
+
+function podeBaterPonto() {
+  if (!ultimoPontoTimestamp) return true;
+  
+  const tempoPassado = Date.now() - ultimoPontoTimestamp;
+  return tempoPassado >= TEMPO_MINIMO_ENTRE_PONTOS;
+}
+
+/* ============================
    Próximo Ponto - Sistema de 8 pontos (4 entradas + 4 saídas)
    ============================ */
 function proximoPonto(){
+  if (!podeBaterPonto()) {
+    const tempoPassado = Date.now() - ultimoPontoTimestamp;
+    const tempoRestante = TEMPO_MINIMO_ENTRE_PONTOS - tempoPassado;
+    const minutos = Math.ceil(tempoRestante / 60000);
+    throw new Error(`Aguarde ${minutos} minutos para o próximo ponto`);
+  }
+
   const hoje = new Date().toLocaleDateString('pt-BR');
   const pontosHoje = pontosDia.filter(p => p.data === hoje);
   
@@ -317,70 +457,234 @@ function atualizarContadorPontosHoje(){
 }
 
 /* ============================
-   Sincronização CORRIGIDA
+   Câmera frontal FIXA
    ============================ */
-async function atualizarPendCount(){
-  try{
-    const pendentes = await getAllPendingFromDB();
-    pendCountEl.textContent = pendentes.length;
-  } catch(e){ 
-    pendCountEl.textContent = '0'; 
-  }
+function abrirCameraFrontal() {
+  return new Promise((resolve, reject) => {
+    // Método moderno para câmera frontal
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      })
+      .then(stream => {
+        // Cria um elemento de vídeo temporário
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        
+        // Cria um canvas para capturar a foto
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          // Espera um momento para a câmera estabilizar
+          setTimeout(() => {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => {
+              // Para a stream e limpa
+              stream.getTracks().forEach(track => track.stop());
+              document.body.removeChild(video);
+              
+              if (blob) {
+                const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
+                resolve(file);
+              } else {
+                reject(new Error('Não foi possível capturar a foto'));
+              }
+            }, 'image/jpeg', 0.8);
+          }, 1000);
+        };
+        
+        video.onerror = () => {
+          stream.getTracks().forEach(track => track.stop());
+          reject(new Error('Erro ao acessar a câmera'));
+        };
+        
+        document.body.appendChild(video);
+      })
+      .catch(err => {
+        reject(new Error('Não foi possível acessar a câmera frontal: ' + err.message));
+      });
+    } else {
+      reject(new Error('Seu navegador não suporta acesso à câmera'));
+    }
+  });
 }
 
-async function sincronizarPontosPendentes(){
-  if(!navigator.onLine) {
-    console.log('Offline - sincronização adiada');
+/* ============================
+   Botão 'Bater Ponto' fluxo principal
+   ============================ */
+botao.addEventListener('click', async ()=>{
+  if (!usuarioCadastrado) {
+    showToast('Complete seu cadastro primeiro', 'error', 3000);
+    verificarCadastro();
     return;
   }
-  
-  try{
-    const pendentes = await getAllPendingFromDB();
-    if(!pendentes || pendentes.length === 0){ 
-      await atualizarPendCount(); 
+
+  // Verifica se já bateu todos os pontos do dia
+  let prox;
+  try {
+    prox = proximoPonto();
+    if(!prox){ 
+      mensagemConfirmacao.textContent='Todos os 8 pontos já registrados hoje!'; 
+      showToast('Todos os pontos do dia já foram registrados', 'info', 3000);
       return; 
     }
+  } catch (err) {
+    showToast(err.message, 'error', 4000);
+    return;
+  }
+
+  // SOLICITAÇÃO GPS
+  warnGPS.style.display = 'none';
+  mensagemConfirmacao.textContent = 'Obtendo localização GPS...';
+  
+  try {
+    // Mostrar feedback visual
+    botao.style.opacity = '0.7';
+    botao.style.pointerEvents = 'none';
+    botao.classList.add('processing');
     
-    console.log(`Sincronizando ${pendentes.length} ponto(s) pendentes...`);
+    const pos = await obterLocalizacaoComTimeout(20000);
     
-    // Processa um por um para evitar sobrecarga
-    for(let i = 0; i < pendentes.length; i++){
-      const p = pendentes[i];
-      try{
-        console.log(`Enviando ponto ${i+1}/${pendentes.length}:`, p._id);
-        await enviarPorEmailAutomatico(p);
-        await deletePendingFromDB(p._id);
-        
-        // Atualiza status no localStorage
-        const idx = pontosDia.findIndex(x => x._id === p._id);
-        if(idx !== -1){ 
-          pontosDia[idx].enviado = true; 
-          localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia)); 
-        }
-        
-        console.log(`Ponto ${p._id} sincronizado com sucesso`);
-        
-      } catch(err){
-        console.warn(`Falha no envio do ponto ${p._id}:`, err);
-        // Continua com os próximos pontos em vez de parar
-        continue;
-      }
+    mensagemConfirmacao.textContent = 'Obtendo selfie...';
+    showToast('GPS OK! Capturando selfie...', 'success', 2000);
+    
+    // Captura selfie com câmera frontal FIXA
+    const selfieFile = await abrirCameraFrontal();
+    
+    await processarSelfie(selfieFile, pos, prox);
+    
+  } catch (err) {
+    console.error('Erro no processo:', err);
+    
+    // Restaurar botão
+    botao.style.opacity = '1';
+    botao.style.pointerEvents = 'auto';
+    botao.classList.remove('processing');
+    
+    if (err.message.includes('câmera')) {
+      warnGPS.style.display = 'block';
+      warnGPS.innerHTML = `
+        <strong>Erro na câmera:</strong> ${err.message}<br>
+        <small>• Verifique as permissões da câmera<br>
+        • Tente novamente</small>
+      `;
+    } else if (err.message.includes('GPS')) {
+      warnGPS.style.display = 'block';
+      warnGPS.innerHTML = `
+        <strong>Falha na localização:</strong> ${err.message}<br>
+        <small>• Verifique permissões do navegador<br>
+        • Ative o GPS do dispositivo<br>
+        • Tente em área aberta com boa recepção</small>
+      `;
     }
     
-    // Atualiza interface após sincronização
-    await atualizarPendCount();
+    mensagemConfirmacao.textContent = 'Falha no processo. Tente novamente.';
+    showToast('Erro: ' + err.message, 'error', 5000);
+  }
+});
+
+/* ============================
+   Função para processar selfie
+   ============================ */
+async function processarSelfie(file, pos, prox) {
+  try {
+    const compressedBlob = await compressImageFileToJpegBlob(file, 800, 0.75);
+    const thumbDataUrl = await blobToDataURL(await compressImageBlobForThumb(compressedBlob, 140, 0.65));
+    const agora = new Date();
+    const ponto = {
+      _id: 'p-' + agora.getTime() + '-' + Math.random().toString(36).slice(2,8),
+      nome: usuarioCadastrado.nome,
+      cargo: usuarioCadastrado.cargo,
+      telefone: usuarioCadastrado.telefone,
+      tipo: prox.tipo,
+      numero: prox.numero,
+      observacoes: observacoesEl.value.trim() || '',
+      data: agora.toLocaleDateString('pt-BR'),
+      hora: agora.toLocaleTimeString('pt-BR'),
+      timestamp: agora.toISOString(),
+      thumbnail: thumbDataUrl,
+      localizacao: pos,
+      enviado: false,
+      fotoBlob: compressedBlob
+    };
+
+    // salva resumo localmente (localStorage)
+    pontosDia.push(ponto);
+    localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
+    lastThumb.src = thumbDataUrl; 
+    lastThumb.style.display = 'inline-block';
     atualizarVisualizacaoResumo();
+    atualizarContadorPontosHoje();
+
+    // Atualiza timestamp do último ponto
+    ultimoPontoTimestamp = agora.getTime();
+    iniciarContadorTempo();
+
+    // ENVIO AUTOMÁTICO - SEM INTERRUPÇÃO
+    mensagemConfirmacao.textContent = 'Enviando ponto automaticamente...';
     
+    if(navigator.onLine){
+      try{
+        await enviarPorEmailAutomatico(ponto);
+        ponto.enviado = true;
+        localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
+        mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (enviada)`;
+        showToast('Ponto enviado automaticamente!', 'success', 3000);
+        
+        // Remove o relógio de carregamento (🕒) após envio bem-sucedido
+        atualizarVisualizacaoResumo();
+        
+      } catch(err){
+        // se falhar, salva pendente
+        try{
+          await addPendingToDB(ponto);
+          mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (salva - pendente)`;
+          showToast('Erro no envio. Ponto salvo como pendente.', 'error', 3500);
+        }catch(dbErr){
+          console.error('Falha ao salvar pendente no DB:', dbErr);
+          mensagemConfirmacao.textContent = 'Erro ao salvar ponto localmente.';
+          showToast('Erro ao salvar localmente', 'error', 3500);
+        }
+      } finally {
+        atualizarVisualizacaoResumo();
+      }
+    } else {
+      // offline -> salvar no indexedDB
+      try{
+        await addPendingToDB(ponto);
+        mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (offline - será enviada)`;
+        showToast('Ponto salvo offline. Será sincronizado quando online.', 'info', 3200);
+      }catch(err){
+        console.error('Erro addPendingToDB:', err);
+        mensagemConfirmacao.textContent = 'Erro ao salvar ponto offline.';
+        showToast('Erro ao salvar offline', 'error', 3200);
+      }
+    }
+
   } catch(err){
-    console.warn('Erro geral na sincronização:', err);
+    console.error('Erro ao processar selfie/ponto:', err);
+    mensagemConfirmacao.textContent = 'Erro ao processar a selfie. Tente novamente.';
+    showToast('Erro ao processar a selfie', 'error', 3000);
+    throw err;
+  } finally {
+    // Restaurar botão após processamento
+    botao.style.opacity = '1';
+    botao.style.pointerEvents = 'auto';
+    botao.classList.remove('processing');
   }
 }
 
-setInterval(()=>{ 
-  if(navigator.onLine) {
-    sincronizarPontosPendentes(); 
-  }
-}, 30000); // A cada 30 segundos
+// ... (o restante do código permanece igual, incluindo as funções de GPS, Formspree, compressão, etc.)
+// [Manter todas as outras funções como estão: obterLocalizacaoComTimeout, enviarPorEmailAutomatico, compressImageFileToJpegBlob, etc.]
 
 /* ============================
    GEOLOCALIZAÇÃO SIMPLIFICADA e ROBUSTA
@@ -451,197 +755,21 @@ function obterLocalizacaoComTimeout(ms = 20000) {
             maximumAge: 0
         };
 
-        // Usa watchPosition para melhor captura em dispositivos móveis
         watchId = navigator.geolocation.watchPosition(success, error, options);
     });
 }
 
 /* ============================
-   Botão 'Bater Ponto' fluxo principal CORRIGIDO
-   ============================ */
-botao.addEventListener('click', async ()=>{
-  // validações de campos usuário
-  const nome = nomeUsuarioEl.value.trim();
-  const cargo = cargoUsuarioEl.value.trim();
-  if(!nome || !cargo){
-    mensagemConfirmacao.textContent = 'Preencha nome e cargo antes de bater ponto.';
-    showToast('Preencha nome e cargo', 'error', 2600);
-    return;
-  }
-
-  // Verifica se já bateu todos os pontos do dia
-  const prox = proximoPonto();
-  if(!prox){ 
-    mensagemConfirmacao.textContent='Todos os 8 pontos já registrados hoje!'; 
-    showToast('Todos os pontos do dia já foram registrados', 'info', 3000);
-    return; 
-  }
-
-  // SOLICITAÇÃO GPS
-  warnGPS.style.display = 'none';
-  mensagemConfirmacao.textContent = 'Obtendo localização GPS...';
-  
-  try {
-    // Mostrar feedback visual
-    botao.style.opacity = '0.7';
-    botao.style.pointerEvents = 'none';
-    botao.classList.add('processing');
-    
-    const pos = await obterLocalizacaoComTimeout(20000);
-    
-    mensagemConfirmacao.textContent = 'Localização obtida! Tirando selfie...';
-    showToast('GPS OK! Tirando selfie...', 'success', 2000);
-    
-    window._pendingLocation = pos;
-    
-    // Pequeno delay para usuário ver a mensagem
-    setTimeout(() => {
-      // FORÇA CÂMERA FRONTAL - método mais eficaz
-      inputSelfie.setAttribute('capture', 'user');
-      inputSelfie.setAttribute('accept', 'image/*');
-      
-      // Tenta criar um input temporário para forçar câmera frontal
-      const tempInput = document.createElement('input');
-      tempInput.type = 'file';
-      tempInput.accept = 'image/*';
-      tempInput.capture = 'user'; // Isso força câmera frontal
-      tempInput.style.display = 'none';
-      
-      tempInput.onchange = function(e) {
-        const file = e.target.files[0];
-        if(file) {
-          processarSelfie(file, pos, prox);
-        }
-        document.body.removeChild(tempInput);
-      };
-      
-      document.body.appendChild(tempInput);
-      tempInput.click();
-      
-    }, 800);
-    
-  } catch (err) {
-    console.error('Falha GPS:', err);
-    
-    // Restaurar botão
-    botao.style.opacity = '1';
-    botao.style.pointerEvents = 'auto';
-    botao.classList.remove('processing');
-    
-    warnGPS.style.display = 'block';
-    warnGPS.innerHTML = `
-      <strong>Falha na localização:</strong> ${err.message}<br>
-      <small>• Verifique permissões do navegador<br>
-      • Ative o GPS do dispositivo<br>
-      • Tente em área aberta com boa recepção</small>
-    `;
-    
-    mensagemConfirmacao.textContent = 'Falha na localização. Tente novamente.';
-    showToast('Erro GPS: ' + err.message, 'error', 5000);
-    
-  }
-});
-
-/* ============================
-   Função separada para processar selfie
-   ============================ */
-async function processarSelfie(file, pos, prox) {
-  if(!file){
-    mensagemConfirmacao.textContent = 'Selfie não selecionada — ponto cancelado.';
-    showToast('Selfie não selecionada', 'error', 2400);
-    return;
-  }
-
-  try{
-    const compressedBlob = await compressImageFileToJpegBlob(file, 800, 0.75);
-    const thumbDataUrl = await blobToDataURL(await compressImageBlobForThumb(compressedBlob, 140, 0.65));
-    const agora = new Date();
-    const ponto = {
-      _id: 'p-' + agora.getTime() + '-' + Math.random().toString(36).slice(2,8),
-      nome: nomeUsuarioEl.value.trim(),
-      cargo: cargoUsuarioEl.value.trim(),
-      tipo: prox.tipo,
-      numero: prox.numero,
-      observacoes: observacoesEl.value.trim() || '',
-      data: agora.toLocaleDateString('pt-BR'),
-      hora: agora.toLocaleTimeString('pt-BR'),
-      timestamp: agora.toISOString(),
-      thumbnail: thumbDataUrl,
-      localizacao: pos,
-      enviado: false,
-      fotoBlob: compressedBlob
-    };
-
-    // salva resumo localmente (localStorage)
-    pontosDia.push(ponto);
-    localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
-    lastThumb.src = thumbDataUrl; 
-    lastThumb.style.display = 'inline-block';
-    atualizarVisualizacaoResumo();
-    atualizarContadorPontosHoje();
-
-    // ENVIO AUTOMÁTICO - SEM INTERRUPÇÃO
-    mensagemConfirmacao.textContent = 'Enviando ponto automaticamente...';
-    
-    if(navigator.onLine){
-      try{
-        await enviarPorEmailAutomatico(ponto);
-        ponto.enviado = true;
-        localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
-        mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (enviada)`;
-        showToast('Ponto enviado automaticamente!', 'success', 3000);
-      } catch(err){
-        // se falhar, salva pendente
-        try{
-          await addPendingToDB(ponto);
-          mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (salva - pendente)`;
-          showToast('Erro no envio. Ponto salvo como pendente.', 'error', 3500);
-        }catch(dbErr){
-          console.error('Falha ao salvar pendente no DB:', dbErr);
-          mensagemConfirmacao.textContent = 'Erro ao salvar ponto localmente.';
-          showToast('Erro ao salvar localmente', 'error', 3500);
-        }
-      } finally {
-        atualizarPendCount();
-      }
-    } else {
-      // offline -> salvar no indexedDB
-      try{
-        await addPendingToDB(ponto);
-        mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (offline - será enviada)`;
-        showToast('Ponto salvo offline. Será sincronizado quando online.', 'info', 3200);
-      }catch(err){
-        console.error('Erro addPendingToDB:', err);
-        mensagemConfirmacao.textContent = 'Erro ao salvar ponto offline.';
-        showToast('Erro ao salvar offline', 'error', 3200);
-      }
-      atualizarPendCount();
-    }
-
-  } catch(err){
-    console.error('Erro ao processar selfie/ponto:', err);
-    mensagemConfirmacao.textContent = 'Erro ao processar a selfie. Tente novamente.';
-    showToast('Erro ao processar a selfie', 'error', 3000);
-  } finally {
-    window._pendingLocation = null;
-    // Restaurar botão após processamento
-    botao.style.opacity = '1';
-    botao.style.pointerEvents = 'auto';
-    botao.classList.remove('processing');
-  }
-}
-
-/* ============================
-   ENVIO AUTOMÁTICO POR EMAIL COM FORMSPREE CORRETO
+   ENVIO AUTOMÁTICO POR EMAIL
    ============================ */
 async function enviarPorEmailAutomatico(pontoObj) {
     return new Promise((resolve, reject) => {
         try {
             const formData = new FormData();
             
-            // Adiciona dados do ponto de forma organizada
             formData.append('nome', pontoObj.nome);
             formData.append('cargo', pontoObj.cargo);
+            formData.append('telefone', pontoObj.telefone);
             formData.append('tipo_ponto', pontoObj.tipo);
             formData.append('numero_ponto', pontoObj.numero.toString());
             formData.append('data', pontoObj.data);
@@ -649,11 +777,9 @@ async function enviarPorEmailAutomatico(pontoObj) {
             formData.append('localizacao', `${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}`);
             formData.append('precisao', `±${pontoObj.localizacao.accuracy}m`);
             formData.append('observacoes', pontoObj.observacoes || 'Nenhuma');
-            formData.append('whatsapp', numeroWhatsApp || 'Não informado');
             formData.append('timestamp', pontoObj.timestamp);
             formData.append('_subject', `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`);
             
-            // Adiciona a foto como anexo
             const fotoFile = new File([pontoObj.fotoBlob], 
                 `selfie_${pontoObj.nome.replace(/\s+/g,'_')}_${pontoObj.data}_${pontoObj.tipo.replace(/\s+/g,'_')}.jpg`, 
                 { type: 'image/jpeg' });
@@ -661,7 +787,6 @@ async function enviarPorEmailAutomatico(pontoObj) {
             
             console.log('Enviando dados para Formspree...', FORMSPREE_ENDPOINT);
             
-            // Envia via fetch para o Formspree CORRETO
             fetch(FORMSPREE_ENDPOINT, {
                 method: 'POST',
                 body: formData,
@@ -719,6 +844,7 @@ function compressImageFileToJpegBlob(file, maxWidth = 800, quality = 0.75){
     reader.readAsDataURL(file);
   });
 }
+
 function compressImageBlobForThumb(blob, maxWidth = 140, quality = 0.65){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
@@ -742,6 +868,7 @@ function compressImageBlobForThumb(blob, maxWidth = 140, quality = 0.65){
     reader.readAsDataURL(blob);
   });
 }
+
 function blobToDataURL(blob){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
@@ -752,7 +879,7 @@ function blobToDataURL(blob){
 }
 
 /* ============================
-   Visualização UI resumo
+   Visualização UI resumo - CORRIGIDA (sem relógio de carregamento)
    ============================ */
 function atualizarVisualizacaoResumo(){
   let html = '<h3 style="margin:8px 0 6px 0;">Pontos Registrados (local)</h3>';
@@ -761,7 +888,8 @@ function atualizarVisualizacaoResumo(){
     html += '<ul style="padding-left:14px; margin:0;">';
     pontosDia.forEach(p=>{
       const coord = p.localizacao ? ` • ${p.localizacao.latitude.toFixed(5)},${p.localizacao.longitude.toFixed(5)}` : '';
-      const enviadoBadge = p.enviado ? '✅' : '🕒';
+      // REMOVIDO o relógio de carregamento (🕒) - mostra apenas ✅ para enviados
+      const enviadoBadge = p.enviado ? '✅' : '⏳'; // Mudado para ⏳ apenas para pendentes
       html += `<li style="font-size:14px;margin-bottom:8px;background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
           <strong>${p.nome}</strong> — ${p.cargo} <br>
@@ -783,6 +911,7 @@ function atualizarVisualizacaoResumo(){
    Ponto Dia / Mês simples
    ============================ */
 function mostrarPontoDia(){ atualizarVisualizacaoResumo(); }
+
 function mostrarPontoMes(){
   let html = '<h3>Ponto do Mês (visão local)</h3>';
   if(pontosDia.length===0) html += '<div>Nenhum ponto.</div>';
@@ -795,7 +924,7 @@ function mostrarPontoMes(){
 }
 
 /* ============================
-   Justificativa / Alterar número
+   Justificativa
    ============================ */
 function abrirJustificativa(){ document.getElementById('modalJustificativa').style.display='flex'; }
 function fecharJustificativa(){ document.getElementById('modalJustificativa').style.display='none'; }
@@ -805,13 +934,6 @@ function enviarJustificativa(){
   alert('Justificativa enviada: '+txt);
   document.getElementById('justText').value='';
   fecharJustificativa();
-}
-function alterarNumero(){
-  if(numeroAlterado==='sim'){ alert('Número já alterado.'); return; }
-  localStorage.removeItem('numeroWhatsApp');
-  localStorage.setItem('numeroAlterado','sim');
-  alert('Número removido. Recarregue a página.');
-  location.reload();
 }
 
 /* ============================
@@ -835,21 +957,57 @@ document.addEventListener('click', (e)=>{
    Inicialização
    ============================ */
 async function inicializar(){
+  verificarCadastro();
   carregarLocalStorage();
   
-  // Teste simples de geolocation
   if (!navigator.geolocation) {
     showToast('Seu navegador não suporta GPS', 'error', 5000);
   } else {
     console.log('Geolocation API disponível no navegador');
   }
   
-  try{ 
-    await atualizarPendCount(); 
-  } catch(e) {}
-  
-  if(navigator.onLine) sincronizarPontosPendentes();
+  if(navigator.onLine) {
+    try {
+      const pendentes = await getAllPendingFromDB();
+      if (pendentes.length > 0) {
+        sincronizarPontosPendentes();
+      }
+    } catch(e) {}
+  }
 }
+
+// Sincronização simplificada
+async function sincronizarPontosPendentes(){
+  if(!navigator.onLine) return;
+  
+  try{
+    const pendentes = await getAllPendingFromDB();
+    if(!pendentes || pendentes.length === 0) return;
+    
+    for(let i = 0; i < pendentes.length; i++){
+      const p = pendentes[i];
+      try{
+        await enviarPorEmailAutomatico(p);
+        await deletePendingFromDB(p._id);
+        
+        const idx = pontosDia.findIndex(x => x._id === p._id);
+        if(idx !== -1){ 
+          pontosDia[idx].enviado = true; 
+          localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia)); 
+        }
+      } catch(err){
+        console.warn(`Falha no envio do ponto ${p._id}:`, err);
+        continue;
+      }
+    }
+    
+    atualizarVisualizacaoResumo();
+    
+  } catch(err){
+    console.warn('Erro geral na sincronização:', err);
+  }
+}
+
 inicializar();
 
 </script>
