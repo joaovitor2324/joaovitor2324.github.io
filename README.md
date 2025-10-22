@@ -87,7 +87,8 @@ textarea{resize:vertical;min-height:64px;}
     </div>
     <div class="field">
       <label for="cadastroTelefone">Telefone WhatsApp</label>
-      <input type="text" id="cadastroTelefone" placeholder="Ex: 5531999999999" />
+      <input type="text" id="cadastroTelefone" placeholder="Ex: 31 986952093" maxlength="11" />
+      <small style="color:#ccc;font-size:12px;">DDD + número (ex: 31 986952093)</small>
     </div>
     <button onclick="salvarCadastro()" style="width:100%;padding:12px;background:#00c853;color:white;border:none;border-radius:8px;font-weight:700;margin-top:15px;cursor:pointer;">
       SALVAR CADASTRO
@@ -176,8 +177,8 @@ const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv';
 /* ============================
    Variáveis e elementos
    ============================ */
-const KEY_PONTOS_DIA = 'pontosDia_v7';
-const KEY_CADASTRO = 'cadastroUsuario_v1';
+const KEY_PONTOS_DIA = 'pontosDia_v8';
+const KEY_CADASTRO = 'cadastroUsuario_v2';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
 const TEMPO_MINIMO_ENTRE_PONTOS = 90 * 60 * 1000; // 1 hora e 30 minutos em milissegundos
@@ -189,7 +190,6 @@ const mensagemConfirmacao = document.getElementById('mensagemConfirmacao');
 const botao = document.getElementById('baterPontoBtn');
 const relogioEl = document.getElementById('relogio');
 const visualizacaoPontos = document.getElementById('visualizacaoPontos');
-const pendCountEl = document.getElementById('pendCount');
 const pontosHojeCountEl = document.getElementById('pontosHojeCount');
 const tempoRestanteEl = document.getElementById('tempoRestante');
 const warnGPS = document.getElementById('warnGPS');
@@ -204,155 +204,263 @@ let dbReadyPromise = null;
 let usuarioCadastrado = null;
 let ultimoPontoTimestamp = null;
 let tempoRestanteInterval = null;
+let deviceId = null;
 
 /* ============================
-   Sistema de Cadastro
+   Sistema de Identificação do Dispositivo
+   ============================ */
+function gerarDeviceId() {
+    // Tenta obter um ID único do dispositivo
+    const KEY_DEVICE_ID = 'ponto_device_id';
+    let deviceId = localStorage.getItem(KEY_DEVICE_ID);
+    
+    if (!deviceId) {
+        // Gera um ID único baseado em timestamp + random
+        deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem(KEY_DEVICE_ID, deviceId);
+    }
+    
+    return deviceId;
+}
+
+/* ============================
+   Sistema de Cadastro MELHORADO
    ============================ */
 function verificarCadastro() {
-  const cadastroSalvo = localStorage.getItem(KEY_CADASTRO);
-  if (cadastroSalvo) {
-    usuarioCadastrado = JSON.parse(cadastroSalvo);
-    nomeUsuarioEl.value = usuarioCadastrado.nome;
-    cargoUsuarioEl.value = usuarioCadastrado.cargo;
-    telaCadastro.style.display = 'none';
-  } else {
+    deviceId = gerarDeviceId();
+    const cadastroSalvo = localStorage.getItem(KEY_CADASTRO);
+    
+    if (cadastroSalvo) {
+        try {
+            usuarioCadastrado = JSON.parse(cadastroSalvo);
+            
+            // Verifica se o cadastro pertence a este dispositivo
+            if (usuarioCadastrado.deviceId === deviceId) {
+                nomeUsuarioEl.value = usuarioCadastrado.nome;
+                cargoUsuarioEl.value = usuarioCadastrado.cargo;
+                telaCadastro.style.display = 'none';
+                return;
+            } else {
+                // Cadastro de outro dispositivo - mostra tela de cadastro
+                console.log('Cadastro de outro dispositivo detectado');
+                localStorage.removeItem(KEY_CADASTRO);
+                usuarioCadastrado = null;
+            }
+        } catch (e) {
+            console.error('Erro ao carregar cadastro:', e);
+            localStorage.removeItem(KEY_CADASTRO);
+        }
+    }
+    
+    // Mostra tela de cadastro se não há cadastro válido
     telaCadastro.style.display = 'flex';
-  }
 }
 
 function salvarCadastro() {
-  const nome = document.getElementById('cadastroNome').value.trim();
-  const cargo = document.getElementById('cadastroCargo').value.trim();
-  const telefone = document.getElementById('cadastroTelefone').value.trim();
+    const nome = document.getElementById('cadastroNome').value.trim();
+    const cargo = document.getElementById('cadastroCargo').value.trim();
+    let telefone = document.getElementById('cadastroTelefone').value.trim();
 
-  if (!nome || !cargo || !telefone) {
-    showToast('Preencha todos os campos', 'error', 3000);
-    return;
-  }
+    if (!nome || !cargo || !telefone) {
+        showToast('Preencha todos os campos', 'error', 3000);
+        return;
+    }
 
-  if (!/^\d{12,15}$/.test(telefone)) {
-    showToast('Telefone inválido. Use apenas números (ex: 5531999999999)', 'error', 4000);
-    return;
-  }
+    // Formata o telefone para DDD + número (remove espaços e caracteres especiais)
+    telefone = telefone.replace(/\D/g, ''); // Remove tudo que não é número
+    
+    // Validação para DDD + 9 dígitos (11 números no total)
+    if (!/^\d{11}$/.test(telefone)) {
+        showToast('Telefone inválido. Use DDD + número (ex: 31986952093)', 'error', 4000);
+        return;
+    }
 
-  usuarioCadastrado = {
-    nome: nome,
-    cargo: cargo,
-    telefone: telefone,
-    dataCadastro: new Date().toISOString()
-  };
+    // Formata para exibição: 31 98695-2093
+    const telefoneFormatado = telefone.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3');
 
-  localStorage.setItem(KEY_CADASTRO, JSON.stringify(usuarioCadastrado));
-  nomeUsuarioEl.value = nome;
-  cargoUsuarioEl.value = cargo;
-  telaCadastro.style.display = 'none';
-  
-  showToast('Cadastro salvo com sucesso!', 'success', 3000);
+    usuarioCadastrado = {
+        nome: nome,
+        cargo: cargo,
+        telefone: telefone, // Salva sem formatação para envio
+        telefoneFormatado: telefoneFormatado, // Salva formatado para exibição
+        deviceId: deviceId, // Associa ao dispositivo
+        dataCadastro: new Date().toISOString()
+    };
+
+    localStorage.setItem(KEY_CADASTRO, JSON.stringify(usuarioCadastrado));
+    nomeUsuarioEl.value = nome;
+    cargoUsuarioEl.value = cargo;
+    telaCadastro.style.display = 'none';
+    
+    showToast('Cadastro salvo com sucesso!', 'success', 3000);
 }
 
 function editarCadastro() {
-  localStorage.removeItem(KEY_CADASTRO);
-  usuarioCadastrado = null;
-  verificarCadastro();
+    localStorage.removeItem(KEY_CADASTRO);
+    usuarioCadastrado = null;
+    verificarCadastro();
 }
 
 /* ============================
    Toast helper
    ============================ */
 function showToast(message, type='success', duration=3000){
-  const el = document.createElement('div');
-  el.className = `toast ${type} show`;
-  el.textContent = message;
-  toastContainer.appendChild(el);
-  setTimeout(()=> {
-    el.classList.remove('show');
-    el.style.opacity = '0';
-    setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 350);
-  }, duration);
+    const el = document.createElement('div');
+    el.className = `toast ${type} show`;
+    el.textContent = message;
+    toastContainer.appendChild(el);
+    setTimeout(()=> {
+        el.classList.remove('show');
+        el.style.opacity = '0';
+        setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 350);
+    }, duration);
 }
 
 /* ============================
    IndexedDB helpers
    ============================ */
 function openDB(){
-  if(dbReadyPromise) return dbReadyPromise;
-  dbReadyPromise = new Promise((resolve,reject)=>{
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = (e) => {
-      const idb = e.target.result;
-      if(!idb.objectStoreNames.contains(DB_STORE)){
-        const store = idb.createObjectStore(DB_STORE, { keyPath: '_id' });
-        store.createIndex('timestamp', 'timestamp', { unique: false });
-      }
-    };
-    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
-    req.onerror = (e) => reject(e.target.error);
-  });
-  return dbReadyPromise;
+    if(dbReadyPromise) return dbReadyPromise;
+    dbReadyPromise = new Promise((resolve,reject)=>{
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+            const idb = e.target.result;
+            if(!idb.objectStoreNames.contains(DB_STORE)){
+                const store = idb.createObjectStore(DB_STORE, { keyPath: '_id' });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+        };
+        req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+        req.onerror = (e) => reject(e.target.error);
+    });
+    return dbReadyPromise;
 }
 
 async function getDB(){ if(db) return db; return await openDB(); }
 
 async function addPendingToDB(pendingObj){
-  const idb = await getDB();
-  return new Promise((resolve,reject)=>{
-    const tx = idb.transaction(DB_STORE,'readwrite');
-    const store = tx.objectStore(DB_STORE);
-    const req = store.add(pendingObj);
-    req.onsuccess = ()=> resolve(true);
-    req.onerror = (e) => {
-      if(e && e.target && e.target.error && e.target.error.name === 'ConstraintError'){
-        const putReq = store.put(pendingObj);
-        putReq.onsuccess = ()=> resolve(true);
-        putReq.onerror = (err)=> reject(err.target ? err.target.error : err);
-      } else {
-        reject(e.target ? e.target.error : e);
-      }
-    };
-  });
+    const idb = await getDB();
+    return new Promise((resolve,reject)=>{
+        const tx = idb.transaction(DB_STORE,'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.add(pendingObj);
+        req.onsuccess = ()=> resolve(true);
+        req.onerror = (e) => {
+            if(e && e.target && e.target.error && e.target.error.name === 'ConstraintError'){
+                const putReq = store.put(pendingObj);
+                putReq.onsuccess = ()=> resolve(true);
+                putReq.onerror = (err)=> reject(err.target ? err.target.error : err);
+            } else {
+                reject(e.target ? e.target.error : e);
+            }
+        };
+    });
 }
 
 async function getAllPendingFromDB(){
-  const idb = await getDB();
-  return new Promise((resolve,reject)=>{
-    const tx = idb.transaction(DB_STORE,'readonly');
-    const store = tx.objectStore(DB_STORE);
-    const req = store.getAll();
-    req.onsuccess = ()=> resolve(req.result || []);
-    req.onerror = (e)=> reject(e.target.error);
-  });
+    const idb = await getDB();
+    return new Promise((resolve,reject)=>{
+        const tx = idb.transaction(DB_STORE,'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.getAll();
+        req.onsuccess = ()=> resolve(req.result || []);
+        req.onerror = (e)=> reject(e.target.error);
+    });
 }
 
 async function deletePendingFromDB(id){
-  const idb = await getDB();
-  return new Promise((resolve,reject)=>{
-    const tx = idb.transaction(DB_STORE,'readwrite');
-    const store = tx.objectStore(DB_STORE);
-    const req = store.delete(id);
-    req.onsuccess = ()=> resolve(true);
-    req.onerror = (e)=> reject(e.target.error);
-  });
+    const idb = await getDB();
+    return new Promise((resolve,reject)=>{
+        const tx = idb.transaction(DB_STORE,'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.delete(id);
+        req.onsuccess = ()=> resolve(true);
+        req.onerror = (e)=> reject(e.target.error);
+    });
 }
+
+/* ============================
+   Sincronização MELHORADA - Envia imediatamente
+   ============================ */
+async function sincronizarPontosPendentes() {
+    if (!navigator.onLine) {
+        console.log('Offline - sincronização adiada');
+        return;
+    }
+    
+    try {
+        const pendentes = await getAllPendingFromDB();
+        if (!pendentes || pendentes.length === 0) {
+            console.log('Nenhum ponto pendente para sincronizar');
+            return;
+        }
+        
+        console.log(`Sincronizando ${pendentes.length} ponto(s) pendentes...`);
+        
+        for (let i = 0; i < pendentes.length; i++) {
+            const p = pendentes[i];
+            try {
+                console.log(`Enviando ponto pendente ${i+1}/${pendentes.length}:`, p._id);
+                await enviarPorEmailAutomatico(p);
+                await deletePendingFromDB(p._id);
+                
+                // Atualiza status no localStorage
+                const idx = pontosDia.findIndex(x => x._id === p._id);
+                if (idx !== -1) {
+                    pontosDia[idx].enviado = true;
+                    localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
+                }
+                
+                console.log(`Ponto ${p._id} sincronizado com sucesso`);
+                showToast('Ponto pendente enviado!', 'success', 2000);
+                
+            } catch (err) {
+                console.warn(`Falha no envio do ponto pendente ${p._id}:`, err);
+                // Continua tentando os próximos pontos
+                continue;
+            }
+        }
+        
+        // Atualiza interface após sincronização
+        atualizarVisualizacaoResumo();
+        
+    } catch (err) {
+        console.warn('Erro geral na sincronização:', err);
+    }
+}
+
+// Sincroniza a cada 30 segundos quando online
+setInterval(() => {
+    if (navigator.onLine) {
+        sincronizarPontosPendentes();
+    }
+}, 30000);
+
+// Sincroniza quando volta online
+window.addEventListener('online', () => {
+    showToast('Conexão restaurada - sincronizando pontos...', 'info', 2000);
+    setTimeout(sincronizarPontosPendentes, 1000);
+});
 
 /* ============================
    LocalStorage inicial
    ============================ */
 function carregarLocalStorage(){
-  try{
-    const raw = localStorage.getItem(KEY_PONTOS_DIA);
-    pontosDia = raw ? JSON.parse(raw) : [];
-    atualizarContadorPontosHoje();
-    verificarUltimoPonto();
-  }catch(e){ pontosDia = []; }
-  atualizarVisualizacaoResumo();
+    try{
+        const raw = localStorage.getItem(KEY_PONTOS_DIA);
+        pontosDia = raw ? JSON.parse(raw) : [];
+        atualizarContadorPontosHoje();
+        verificarUltimoPonto();
+    }catch(e){ pontosDia = []; }
+    atualizarVisualizacaoResumo();
 }
 
 /* ============================
    Relógio
    ============================ */
 function atualizarRelogio(){
-  const agora = new Date();
-  relogioEl.textContent = `${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}:${String(agora.getSeconds()).padStart(2,'0')}`;
+    const agora = new Date();
+    relogioEl.textContent = `${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}:${String(agora.getSeconds()).padStart(2,'0')}`;
 }
 setInterval(atualizarRelogio,1000);
 atualizarRelogio();
@@ -361,333 +469,317 @@ atualizarRelogio();
    Sistema de tempo entre pontos (1h30min)
    ============================ */
 function verificarUltimoPonto() {
-  const hoje = new Date().toLocaleDateString('pt-BR');
-  const pontosHoje = pontosDia.filter(p => p.data === hoje);
-  
-  if (pontosHoje.length > 0) {
-    const ultimoPonto = pontosHoje[pontosHoje.length - 1];
-    ultimoPontoTimestamp = new Date(ultimoPonto.timestamp).getTime();
-    iniciarContadorTempo();
-  } else {
-    ultimoPontoTimestamp = null;
-    tempoRestanteEl.textContent = 'Pronto';
-    warnTempo.style.display = 'none';
-  }
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    const pontosHoje = pontosDia.filter(p => p.data === hoje);
+    
+    if (pontosHoje.length > 0) {
+        const ultimoPonto = pontosHoje[pontosHoje.length - 1];
+        ultimoPontoTimestamp = new Date(ultimoPonto.timestamp).getTime();
+        iniciarContadorTempo();
+    } else {
+        ultimoPontoTimestamp = null;
+        tempoRestanteEl.textContent = 'Pronto';
+        warnTempo.style.display = 'none';
+    }
 }
 
 function iniciarContadorTempo() {
-  if (tempoRestanteInterval) {
-    clearInterval(tempoRestanteInterval);
-  }
-
-  tempoRestanteInterval = setInterval(() => {
-    if (!ultimoPontoTimestamp) {
-      tempoRestanteEl.textContent = 'Pronto';
-      warnTempo.style.display = 'none';
-      botao.disabled = false;
-      return;
+    if (tempoRestanteInterval) {
+        clearInterval(tempoRestanteInterval);
     }
 
-    const agora = Date.now();
-    const tempoPassado = agora - ultimoPontoTimestamp;
-    const tempoRestante = TEMPO_MINIMO_ENTRE_PONTOS - tempoPassado;
+    tempoRestanteInterval = setInterval(() => {
+        if (!ultimoPontoTimestamp) {
+            tempoRestanteEl.textContent = 'Pronto';
+            warnTempo.style.display = 'none';
+            botao.disabled = false;
+            return;
+        }
 
-    if (tempoRestante <= 0) {
-      tempoRestanteEl.textContent = 'Pronto';
-      warnTempo.style.display = 'none';
-      botao.disabled = false;
-      clearInterval(tempoRestanteInterval);
-    } else {
-      const minutos = Math.floor(tempoRestante / 60000);
-      const segundos = Math.floor((tempoRestante % 60000) / 1000);
-      tempoRestanteEl.textContent = `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
-      
-      // Desabilita o botão se ainda não passou 1h30min
-      if (tempoRestante > 0) {
-        botao.disabled = true;
-        warnTempo.style.display = 'block';
-        warnTempo.innerHTML = `Aguarde ${minutos} minutos para o próximo ponto`;
-      }
-    }
-  }, 1000);
+        const agora = Date.now();
+        const tempoPassado = agora - ultimoPontoTimestamp;
+        const tempoRestante = TEMPO_MINIMO_ENTRE_PONTOS - tempoPassado;
+
+        if (tempoRestante <= 0) {
+            tempoRestanteEl.textContent = 'Pronto';
+            warnTempo.style.display = 'none';
+            botao.disabled = false;
+            clearInterval(tempoRestanteInterval);
+        } else {
+            const minutos = Math.floor(tempoRestante / 60000);
+            const segundos = Math.floor((tempoRestante % 60000) / 1000);
+            tempoRestanteEl.textContent = `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
+            
+            if (tempoRestante > 0) {
+                botao.disabled = true;
+                warnTempo.style.display = 'block';
+                warnTempo.innerHTML = `Aguarde ${minutos} minutos para o próximo ponto`;
+            }
+        }
+    }, 1000);
 }
 
 function podeBaterPonto() {
-  if (!ultimoPontoTimestamp) return true;
-  
-  const tempoPassado = Date.now() - ultimoPontoTimestamp;
-  return tempoPassado >= TEMPO_MINIMO_ENTRE_PONTOS;
+    if (!ultimoPontoTimestamp) return true;
+    
+    const tempoPassado = Date.now() - ultimoPontoTimestamp;
+    return tempoPassado >= TEMPO_MINIMO_ENTRE_PONTOS;
 }
 
 /* ============================
    Próximo Ponto - Sistema de 8 pontos (4 entradas + 4 saídas)
    ============================ */
 function proximoPonto(){
-  if (!podeBaterPonto()) {
-    const tempoPassado = Date.now() - ultimoPontoTimestamp;
-    const tempoRestante = TEMPO_MINIMO_ENTRE_PONTOS - tempoPassado;
-    const minutos = Math.ceil(tempoRestante / 60000);
-    throw new Error(`Aguarde ${minutos} minutos para o próximo ponto`);
-  }
-
-  const hoje = new Date().toLocaleDateString('pt-BR');
-  const pontosHoje = pontosDia.filter(p => p.data === hoje);
-  
-  // Sequência fixa: Entrada 1, Saída 1, Entrada 2, Saída 2, Entrada 3, Saída 3, Entrada 4, Saída 4
-  const sequencia = ['Entrada 1', 'Saída 1', 'Entrada 2', 'Saída 2', 'Entrada 3', 'Saída 3', 'Entrada 4', 'Saída 4'];
-  
-  // Encontra o próximo ponto baseado nos já registrados
-  for (let i = 0; i < sequencia.length; i++) {
-    const pontoExistente = pontosHoje.find(p => p.tipo === sequencia[i]);
-    if (!pontoExistente) {
-      return { tipo: sequencia[i], numero: i + 1 };
+    if (!podeBaterPonto()) {
+        const tempoPassado = Date.now() - ultimoPontoTimestamp;
+        const tempoRestante = TEMPO_MINIMO_ENTRE_PONTOS - tempoPassado;
+        const minutos = Math.ceil(tempoRestante / 60000);
+        throw new Error(`Aguarde ${minutos} minutos para o próximo ponto`);
     }
-  }
-  
-  return null; // Todos os pontos já foram batidos
+
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    const pontosHoje = pontosDia.filter(p => p.data === hoje);
+    
+    const sequencia = ['Entrada 1', 'Saída 1', 'Entrada 2', 'Saída 2', 'Entrada 3', 'Saída 3', 'Entrada 4', 'Saída 4'];
+    
+    for (let i = 0; i < sequencia.length; i++) {
+        const pontoExistente = pontosHoje.find(p => p.tipo === sequencia[i]);
+        if (!pontoExistente) {
+            return { tipo: sequencia[i], numero: i + 1 };
+        }
+    }
+    
+    return null;
 }
 
 /* ============================
    Atualizar contador de pontos do dia
    ============================ */
 function atualizarContadorPontosHoje(){
-  const hoje = new Date().toLocaleDateString('pt-BR');
-  const pontosHoje = pontosDia.filter(p => p.data === hoje).length;
-  pontosHojeCountEl.textContent = `${pontosHoje}/8`;
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    const pontosHoje = pontosDia.filter(p => p.data === hoje).length;
+    pontosHojeCountEl.textContent = `${pontosHoje}/8`;
 }
 
 /* ============================
    Câmera frontal FIXA
    ============================ */
 function abrirCameraFrontal() {
-  return new Promise((resolve, reject) => {
-    // Método moderno para câmera frontal
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
-      })
-      .then(stream => {
-        // Cria um elemento de vídeo temporário
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-        
-        // Cria um canvas para capturar a foto
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        
-        video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          
-          // Espera um momento para a câmera estabilizar
-          setTimeout(() => {
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob(blob => {
-              // Para a stream e limpa
-              stream.getTracks().forEach(track => track.stop());
-              document.body.removeChild(video);
-              
-              if (blob) {
-                const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
-                resolve(file);
-              } else {
-                reject(new Error('Não foi possível capturar a foto'));
-              }
-            }, 'image/jpeg', 0.8);
-          }, 1000);
-        };
-        
-        video.onerror = () => {
-          stream.getTracks().forEach(track => track.stop());
-          reject(new Error('Erro ao acessar a câmera'));
-        };
-        
-        document.body.appendChild(video);
-      })
-      .catch(err => {
-        reject(new Error('Não foi possível acessar a câmera frontal: ' + err.message));
-      });
-    } else {
-      reject(new Error('Seu navegador não suporta acesso à câmera'));
-    }
-  });
+    return new Promise((resolve, reject) => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'user',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
+            })
+            .then(stream => {
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    setTimeout(() => {
+                        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob(blob => {
+                            stream.getTracks().forEach(track => track.stop());
+                            document.body.removeChild(video);
+                            
+                            if (blob) {
+                                const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
+                                resolve(file);
+                            } else {
+                                reject(new Error('Não foi possível capturar a foto'));
+                            }
+                        }, 'image/jpeg', 0.8);
+                    }, 1000);
+                };
+                
+                video.onerror = () => {
+                    stream.getTracks().forEach(track => track.stop());
+                    reject(new Error('Erro ao acessar a câmera'));
+                };
+                
+                document.body.appendChild(video);
+            })
+            .catch(err => {
+                reject(new Error('Não foi possível acessar a câmera frontal: ' + err.message));
+            });
+        } else {
+            reject(new Error('Seu navegador não suporta acesso à câmera'));
+        }
+    });
 }
 
 /* ============================
    Botão 'Bater Ponto' fluxo principal
    ============================ */
 botao.addEventListener('click', async ()=>{
-  if (!usuarioCadastrado) {
-    showToast('Complete seu cadastro primeiro', 'error', 3000);
-    verificarCadastro();
-    return;
-  }
-
-  // Verifica se já bateu todos os pontos do dia
-  let prox;
-  try {
-    prox = proximoPonto();
-    if(!prox){ 
-      mensagemConfirmacao.textContent='Todos os 8 pontos já registrados hoje!'; 
-      showToast('Todos os pontos do dia já foram registrados', 'info', 3000);
-      return; 
+    if (!usuarioCadastrado) {
+        showToast('Complete seu cadastro primeiro', 'error', 3000);
+        verificarCadastro();
+        return;
     }
-  } catch (err) {
-    showToast(err.message, 'error', 4000);
-    return;
-  }
 
-  // SOLICITAÇÃO GPS
-  warnGPS.style.display = 'none';
-  mensagemConfirmacao.textContent = 'Obtendo localização GPS...';
-  
-  try {
-    // Mostrar feedback visual
-    botao.style.opacity = '0.7';
-    botao.style.pointerEvents = 'none';
-    botao.classList.add('processing');
-    
-    const pos = await obterLocalizacaoComTimeout(20000);
-    
-    mensagemConfirmacao.textContent = 'Obtendo selfie...';
-    showToast('GPS OK! Capturando selfie...', 'success', 2000);
-    
-    // Captura selfie com câmera frontal FIXA
-    const selfieFile = await abrirCameraFrontal();
-    
-    await processarSelfie(selfieFile, pos, prox);
-    
-  } catch (err) {
-    console.error('Erro no processo:', err);
-    
-    // Restaurar botão
-    botao.style.opacity = '1';
-    botao.style.pointerEvents = 'auto';
-    botao.classList.remove('processing');
-    
-    if (err.message.includes('câmera')) {
-      warnGPS.style.display = 'block';
-      warnGPS.innerHTML = `
-        <strong>Erro na câmera:</strong> ${err.message}<br>
-        <small>• Verifique as permissões da câmera<br>
-        • Tente novamente</small>
-      `;
-    } else if (err.message.includes('GPS')) {
-      warnGPS.style.display = 'block';
-      warnGPS.innerHTML = `
-        <strong>Falha na localização:</strong> ${err.message}<br>
-        <small>• Verifique permissões do navegador<br>
-        • Ative o GPS do dispositivo<br>
-        • Tente em área aberta com boa recepção</small>
-      `;
+    let prox;
+    try {
+        prox = proximoPonto();
+        if(!prox){ 
+            mensagemConfirmacao.textContent='Todos os 8 pontos já registrados hoje!'; 
+            showToast('Todos os pontos do dia já foram registrados', 'info', 3000);
+            return; 
+        }
+    } catch (err) {
+        showToast(err.message, 'error', 4000);
+        return;
     }
+
+    warnGPS.style.display = 'none';
+    mensagemConfirmacao.textContent = 'Obtendo localização GPS...';
     
-    mensagemConfirmacao.textContent = 'Falha no processo. Tente novamente.';
-    showToast('Erro: ' + err.message, 'error', 5000);
-  }
+    try {
+        botao.style.opacity = '0.7';
+        botao.style.pointerEvents = 'none';
+        botao.classList.add('processing');
+        
+        const pos = await obterLocalizacaoComTimeout(20000);
+        
+        mensagemConfirmacao.textContent = 'Obtendo selfie...';
+        showToast('GPS OK! Capturando selfie...', 'success', 2000);
+        
+        const selfieFile = await abrirCameraFrontal();
+        
+        await processarSelfie(selfieFile, pos, prox);
+        
+    } catch (err) {
+        console.error('Erro no processo:', err);
+        
+        botao.style.opacity = '1';
+        botao.style.pointerEvents = 'auto';
+        botao.classList.remove('processing');
+        
+        if (err.message.includes('câmera')) {
+            warnGPS.style.display = 'block';
+            warnGPS.innerHTML = `
+                <strong>Erro na câmera:</strong> ${err.message}<br>
+                <small>• Verifique as permissões da câmera<br>
+                • Tente novamente</small>
+            `;
+        } else if (err.message.includes('GPS')) {
+            warnGPS.style.display = 'block';
+            warnGPS.innerHTML = `
+                <strong>Falha na localização:</strong> ${err.message}<br>
+                <small>• Verifique permissões do navegador<br>
+                • Ative o GPS do dispositivo<br>
+                • Tente em área aberta com boa recepção</small>
+            `;
+        }
+        
+        mensagemConfirmacao.textContent = 'Falha no processo. Tente novamente.';
+        showToast('Erro: ' + err.message, 'error', 5000);
+    }
 });
 
 /* ============================
    Função para processar selfie
    ============================ */
 async function processarSelfie(file, pos, prox) {
-  try {
-    const compressedBlob = await compressImageFileToJpegBlob(file, 800, 0.75);
-    const thumbDataUrl = await blobToDataURL(await compressImageBlobForThumb(compressedBlob, 140, 0.65));
-    const agora = new Date();
-    const ponto = {
-      _id: 'p-' + agora.getTime() + '-' + Math.random().toString(36).slice(2,8),
-      nome: usuarioCadastrado.nome,
-      cargo: usuarioCadastrado.cargo,
-      telefone: usuarioCadastrado.telefone,
-      tipo: prox.tipo,
-      numero: prox.numero,
-      observacoes: observacoesEl.value.trim() || '',
-      data: agora.toLocaleDateString('pt-BR'),
-      hora: agora.toLocaleTimeString('pt-BR'),
-      timestamp: agora.toISOString(),
-      thumbnail: thumbDataUrl,
-      localizacao: pos,
-      enviado: false,
-      fotoBlob: compressedBlob
-    };
+    try {
+        const compressedBlob = await compressImageFileToJpegBlob(file, 800, 0.75);
+        const thumbDataUrl = await blobToDataURL(await compressImageBlobForThumb(compressedBlob, 140, 0.65));
+        const agora = new Date();
+        const ponto = {
+            _id: 'p-' + agora.getTime() + '-' + Math.random().toString(36).slice(2,8),
+            nome: usuarioCadastrado.nome,
+            cargo: usuarioCadastrado.cargo,
+            telefone: usuarioCadastrado.telefoneFormatado, // Usa o telefone formatado
+            tipo: prox.tipo,
+            numero: prox.numero,
+            observacoes: observacoesEl.value.trim() || '',
+            data: agora.toLocaleDateString('pt-BR'),
+            hora: agora.toLocaleTimeString('pt-BR'),
+            timestamp: agora.toISOString(),
+            thumbnail: thumbDataUrl,
+            localizacao: pos,
+            enviado: false,
+            fotoBlob: compressedBlob
+        };
 
-    // salva resumo localmente (localStorage)
-    pontosDia.push(ponto);
-    localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
-    lastThumb.src = thumbDataUrl; 
-    lastThumb.style.display = 'inline-block';
-    atualizarVisualizacaoResumo();
-    atualizarContadorPontosHoje();
-
-    // Atualiza timestamp do último ponto
-    ultimoPontoTimestamp = agora.getTime();
-    iniciarContadorTempo();
-
-    // ENVIO AUTOMÁTICO - SEM INTERRUPÇÃO
-    mensagemConfirmacao.textContent = 'Enviando ponto automaticamente...';
-    
-    if(navigator.onLine){
-      try{
-        await enviarPorEmailAutomatico(ponto);
-        ponto.enviado = true;
+        // Salva localmente
+        pontosDia.push(ponto);
         localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
-        mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (enviada)`;
-        showToast('Ponto enviado automaticamente!', 'success', 3000);
-        
-        // Remove o relógio de carregamento (🕒) após envio bem-sucedido
+        lastThumb.src = thumbDataUrl; 
+        lastThumb.style.display = 'inline-block';
         atualizarVisualizacaoResumo();
-        
-      } catch(err){
-        // se falhar, salva pendente
-        try{
-          await addPendingToDB(ponto);
-          mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (salva - pendente)`;
-          showToast('Erro no envio. Ponto salvo como pendente.', 'error', 3500);
-        }catch(dbErr){
-          console.error('Falha ao salvar pendente no DB:', dbErr);
-          mensagemConfirmacao.textContent = 'Erro ao salvar ponto localmente.';
-          showToast('Erro ao salvar localmente', 'error', 3500);
-        }
-      } finally {
-        atualizarVisualizacaoResumo();
-      }
-    } else {
-      // offline -> salvar no indexedDB
-      try{
-        await addPendingToDB(ponto);
-        mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (offline - será enviada)`;
-        showToast('Ponto salvo offline. Será sincronizado quando online.', 'info', 3200);
-      }catch(err){
-        console.error('Erro addPendingToDB:', err);
-        mensagemConfirmacao.textContent = 'Erro ao salvar ponto offline.';
-        showToast('Erro ao salvar offline', 'error', 3200);
-      }
-    }
+        atualizarContadorPontosHoje();
 
-  } catch(err){
-    console.error('Erro ao processar selfie/ponto:', err);
-    mensagemConfirmacao.textContent = 'Erro ao processar a selfie. Tente novamente.';
-    showToast('Erro ao processar a selfie', 'error', 3000);
-    throw err;
-  } finally {
-    // Restaurar botão após processamento
-    botao.style.opacity = '1';
-    botao.style.pointerEvents = 'auto';
-    botao.classList.remove('processing');
-  }
+        // Atualiza timestamp do último ponto
+        ultimoPontoTimestamp = agora.getTime();
+        iniciarContadorTempo();
+
+        // TENTA ENVIAR IMEDIATAMENTE - NÃO ESPERA OS 8 PONTOS
+        mensagemConfirmacao.textContent = 'Enviando ponto automaticamente...';
+        
+        if(navigator.onLine){
+            try{
+                await enviarPorEmailAutomatico(ponto);
+                ponto.enviado = true;
+                localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
+                mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (enviada)`;
+                showToast('Ponto enviado automaticamente!', 'success', 3000);
+                
+                atualizarVisualizacaoResumo();
+                
+            } catch(err){
+                // Se falhar, salva como pendente para sincronização posterior
+                try{
+                    await addPendingToDB(ponto);
+                    mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (salva - será enviada)`;
+                    showToast('Ponto salvo. Será enviado automaticamente quando online.', 'info', 3500);
+                }catch(dbErr){
+                    console.error('Falha ao salvar pendente no DB:', dbErr);
+                    mensagemConfirmacao.textContent = 'Erro ao salvar ponto localmente.';
+                    showToast('Erro ao salvar localmente', 'error', 3500);
+                }
+            } finally {
+                atualizarVisualizacaoResumo();
+            }
+        } else {
+            // Offline - salva como pendente
+            try{
+                await addPendingToDB(ponto);
+                mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (offline - será enviada)`;
+                showToast('Ponto salvo offline. Será sincronizado quando online.', 'info', 3200);
+            }catch(err){
+                console.error('Erro addPendingToDB:', err);
+                mensagemConfirmacao.textContent = 'Erro ao salvar ponto offline.';
+                showToast('Erro ao salvar offline', 'error', 3200);
+            }
+        }
+
+    } catch(err){
+        console.error('Erro ao processar selfie/ponto:', err);
+        mensagemConfirmacao.textContent = 'Erro ao processar a selfie. Tente novamente.';
+        showToast('Erro ao processar a selfie', 'error', 3000);
+        throw err;
+    } finally {
+        botao.style.opacity = '1';
+        botao.style.pointerEvents = 'auto';
+        botao.classList.remove('processing');
+    }
 }
 
-// ... (o restante do código permanece igual, incluindo as funções de GPS, Formspree, compressão, etc.)
-// [Manter todas as outras funções como estão: obterLocalizacaoComTimeout, enviarPorEmailAutomatico, compressImageFileToJpegBlob, etc.]
+// ... (mantenha as funções restantes como obterLocalizacaoComTimeout, compressImageFileToJpegBlob, etc.)
 
 /* ============================
-   GEOLOCALIZAÇÃO SIMPLIFICADA e ROBUSTA
+   GEOLOCALIZAÇÃO
    ============================ */
 function obterLocalizacaoComTimeout(ms = 20000) {
     return new Promise((resolve, reject) => {
@@ -819,92 +911,91 @@ async function enviarPorEmailAutomatico(pontoObj) {
    Compressão helpers
    ============================ */
 function compressImageFileToJpegBlob(file, maxWidth = 800, quality = 0.75){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const ratio = (img.width && img.height) ? img.width / img.height : 1;
-        const width = img.width > maxWidth ? maxWidth : img.width;
-        const height = Math.round(width / ratio);
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if(blob) resolve(blob);
-          else reject(new Error('Falha ao converter canvas to Blob'));
-        }, 'image/jpeg', quality);
-      };
-      img.onerror = (e)=> reject(e);
-      img.src = reader.result;
-    };
-    reader.onerror = (e)=> reject(e);
-    reader.readAsDataURL(file);
-  });
+    return new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const ratio = (img.width && img.height) ? img.width / img.height : 1;
+                const width = img.width > maxWidth ? maxWidth : img.width;
+                const height = Math.round(width / ratio);
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((blob) => {
+                    if(blob) resolve(blob);
+                    else reject(new Error('Falha ao converter canvas to Blob'));
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = (e)=> reject(e);
+            img.src = reader.result;
+        };
+        reader.onerror = (e)=> reject(e);
+        reader.readAsDataURL(file);
+    });
 }
 
 function compressImageBlobForThumb(blob, maxWidth = 140, quality = 0.65){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const ratio = (img.width && img.height) ? img.width / img.height : 1;
-        const width = img.width > maxWidth ? maxWidth : img.width;
-        const height = Math.round(width / ratio);
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((b) => { if(b) resolve(b); else reject(new Error('thumb blob fail')); }, 'image/jpeg', quality);
-      };
-      img.onerror = (e)=> reject(e);
-      img.src = reader.result;
-    };
-    reader.onerror = (e)=> reject(e);
-    reader.readAsDataURL(blob);
-  });
+    return new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const ratio = (img.width && img.height) ? img.width / img.height : 1;
+                const width = img.width > maxWidth ? maxWidth : img.width;
+                const height = Math.round(width / ratio);
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((b) => { if(b) resolve(b); else reject(new Error('thumb blob fail')); }, 'image/jpeg', quality);
+            };
+            img.onerror = (e)=> reject(e);
+            img.src = reader.result;
+        };
+        reader.onerror = (e)=> reject(e);
+        reader.readAsDataURL(blob);
+    });
 }
 
 function blobToDataURL(blob){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = ()=> resolve(reader.result);
-    reader.onerror = ()=> reject(new Error('Falha blob->dataURL'));
-    reader.readAsDataURL(blob);
-  });
+    return new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = ()=> resolve(reader.result);
+        reader.onerror = ()=> reject(new Error('Falha blob->dataURL'));
+        reader.readAsDataURL(blob);
+    });
 }
 
 /* ============================
-   Visualização UI resumo - CORRIGIDA (sem relógio de carregamento)
+   Visualização UI resumo
    ============================ */
 function atualizarVisualizacaoResumo(){
-  let html = '<h3 style="margin:8px 0 6px 0;">Pontos Registrados (local)</h3>';
-  if(pontosDia.length===0) html += '<div style="padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;">Nenhum ponto registrado ainda.</div>';
-  else {
-    html += '<ul style="padding-left:14px; margin:0;">';
-    pontosDia.forEach(p=>{
-      const coord = p.localizacao ? ` • ${p.localizacao.latitude.toFixed(5)},${p.localizacao.longitude.toFixed(5)}` : '';
-      // REMOVIDO o relógio de carregamento (🕒) - mostra apenas ✅ para enviados
-      const enviadoBadge = p.enviado ? '✅' : '⏳'; // Mudado para ⏳ apenas para pendentes
-      html += `<li style="font-size:14px;margin-bottom:8px;background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
-        <div>
-          <strong>${p.nome}</strong> — ${p.cargo} <br>
-          <small>${p.tipo} — ${p.data} ${p.hora}${coord}</small><br>
-          <small style="color:#ffd;">${p.observacoes || ''}</small>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${p.thumbnail ? `<img src="${p.thumbnail}" alt="thumb" style="width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.12)">` : ''}
-          <div style="font-weight:800">${enviadoBadge}</div>
-        </div>
-      </li>`;
-    });
-    html += '</ul>';
-  }
-  visualizacaoPontos.innerHTML = html;
+    let html = '<h3 style="margin:8px 0 6px 0;">Pontos Registrados (local)</h3>';
+    if(pontosDia.length===0) html += '<div style="padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;">Nenhum ponto registrado ainda.</div>';
+    else {
+        html += '<ul style="padding-left:14px; margin:0;">';
+        pontosDia.forEach(p=>{
+            const coord = p.localizacao ? ` • ${p.localizacao.latitude.toFixed(5)},${p.localizacao.longitude.toFixed(5)}` : '';
+            const enviadoBadge = p.enviado ? '✅' : '⏳';
+            html += `<li style="font-size:14px;margin-bottom:8px;background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
+                <div>
+                <strong>${p.nome}</strong> — ${p.cargo} <br>
+                <small>${p.tipo} — ${p.data} ${p.hora}${coord}</small><br>
+                <small style="color:#ffd;">${p.observacoes || ''}</small>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                ${p.thumbnail ? `<img src="${p.thumbnail}" alt="thumb" style="width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.12)">` : ''}
+                <div style="font-weight:800">${enviadoBadge}</div>
+                </div>
+            </li>`;
+        });
+        html += '</ul>';
+    }
+    visualizacaoPontos.innerHTML = html;
 }
 
 /* ============================
@@ -913,14 +1004,14 @@ function atualizarVisualizacaoResumo(){
 function mostrarPontoDia(){ atualizarVisualizacaoResumo(); }
 
 function mostrarPontoMes(){
-  let html = '<h3>Ponto do Mês (visão local)</h3>';
-  if(pontosDia.length===0) html += '<div>Nenhum ponto.</div>';
-  else {
-    html += '<ul>';
-    pontosDia.forEach(p => html += `<li>${p.data} ${p.hora} — ${p.nome} — ${p.tipo}</li>`);
-    html += '</ul>';
-  }
-  visualizacaoPontos.innerHTML = html;
+    let html = '<h3>Ponto do Mês (visão local)</h3>';
+    if(pontosDia.length===0) html += '<div>Nenhum ponto.</div>';
+    else {
+        html += '<ul>';
+        pontosDia.forEach(p => html += `<li>${p.data} ${p.hora} — ${p.nome} — ${p.tipo}</li>`);
+        html += '</ul>';
+    }
+    visualizacaoPontos.innerHTML = html;
 }
 
 /* ============================
@@ -929,11 +1020,11 @@ function mostrarPontoMes(){
 function abrirJustificativa(){ document.getElementById('modalJustificativa').style.display='flex'; }
 function fecharJustificativa(){ document.getElementById('modalJustificativa').style.display='none'; }
 function enviarJustificativa(){
-  const txt = document.getElementById('justText').value.trim();
-  if(txt===''){ alert('Digite uma justificativa.'); return; }
-  alert('Justificativa enviada: '+txt);
-  document.getElementById('justText').value='';
-  fecharJustificativa();
+    const txt = document.getElementById('justText').value.trim();
+    if(txt===''){ alert('Digite uma justificativa.'); return; }
+    alert('Justificativa enviada: '+txt);
+    document.getElementById('justText').value='';
+    fecharJustificativa();
 }
 
 /* ============================
@@ -942,70 +1033,32 @@ function enviarJustificativa(){
 const menuBtn = document.getElementById('menuBtn');
 const menuOptions = document.getElementById('menuOptions');
 menuBtn.addEventListener('click', (e)=>{
-  const visible = menuOptions.style.display === 'flex' || menuOptions.style.display === 'block';
-  menuOptions.style.display = visible ? 'none' : 'flex';
-  menuOptions.setAttribute('aria-hidden', visible ? 'true' : 'false');
+    const visible = menuOptions.style.display === 'flex' || menuOptions.style.display === 'block';
+    menuOptions.style.display = visible ? 'none' : 'flex';
+    menuOptions.setAttribute('aria-hidden', visible ? 'true' : 'false');
 });
 document.addEventListener('click', (e)=>{
-  if(!menuOptions.contains(e.target) && e.target !== menuBtn){
-    menuOptions.style.display = 'none';
-    menuOptions.setAttribute('aria-hidden','true');
-  }
+    if(!menuOptions.contains(e.target) && e.target !== menuBtn){
+        menuOptions.style.display = 'none';
+        menuOptions.setAttribute('aria-hidden','true');
+    }
 });
 
 /* ============================
    Inicialização
    ============================ */
 async function inicializar(){
-  verificarCadastro();
-  carregarLocalStorage();
-  
-  if (!navigator.geolocation) {
-    showToast('Seu navegador não suporta GPS', 'error', 5000);
-  } else {
-    console.log('Geolocation API disponível no navegador');
-  }
-  
-  if(navigator.onLine) {
-    try {
-      const pendentes = await getAllPendingFromDB();
-      if (pendentes.length > 0) {
-        sincronizarPontosPendentes();
-      }
-    } catch(e) {}
-  }
-}
-
-// Sincronização simplificada
-async function sincronizarPontosPendentes(){
-  if(!navigator.onLine) return;
-  
-  try{
-    const pendentes = await getAllPendingFromDB();
-    if(!pendentes || pendentes.length === 0) return;
+    verificarCadastro();
+    carregarLocalStorage();
     
-    for(let i = 0; i < pendentes.length; i++){
-      const p = pendentes[i];
-      try{
-        await enviarPorEmailAutomatico(p);
-        await deletePendingFromDB(p._id);
-        
-        const idx = pontosDia.findIndex(x => x._id === p._id);
-        if(idx !== -1){ 
-          pontosDia[idx].enviado = true; 
-          localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia)); 
-        }
-      } catch(err){
-        console.warn(`Falha no envio do ponto ${p._id}:`, err);
-        continue;
-      }
+    if (!navigator.geolocation) {
+        showToast('Seu navegador não suporta GPS', 'error', 5000);
     }
     
-    atualizarVisualizacaoResumo();
-    
-  } catch(err){
-    console.warn('Erro geral na sincronização:', err);
-  }
+    // Sincroniza pontos pendentes ao iniciar
+    if(navigator.onLine) {
+        setTimeout(sincronizarPontosPendentes, 2000);
+    }
 }
 
 inicializar();
