@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Sistema de Ponto</title>
+<title>Registro de Ponto</title>
 <!-- Forçar HTTPS para funcionamento do GPS -->
 <script>
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
@@ -75,11 +75,10 @@ textarea{resize:vertical;min-height:64px;}
   <button onclick="mostrarPontoDia()">Ponto do Dia</button>
   <button onclick="mostrarPontoMes()">Ponto do Mês</button>
   <button onclick="abrirJustificativa()">Falta/Atraso</button>
-  <button onclick="alterarCadastro()">Alterar Cadastro</button>
 </div>
 
 <div class="header">
-  <h1>Sistema de Ponto</h1>
+  <h1>Registro de Ponto</h1>
 </div>
 
 <main>
@@ -111,7 +110,7 @@ textarea{resize:vertical;min-height:64px;}
     <div class="mensagem-confirmacao" id="mensagemConfirmacao"></div>
 
     <div class="statusBar" id="statusBar">
-      <div>Conexão: <span id="connStatus">--</span></div>
+      <div>Pontos Hoje: <span id="pontosHojeCount">0/8</span></div>
       <div>Pendentes: <span id="pendCount" class="pendentes">0</span></div>
       <img id="lastThumb" class="thumbnail" style="display:none" alt="thumb">
     </div>
@@ -123,8 +122,8 @@ textarea{resize:vertical;min-height:64px;}
 </main>
 
 <div class="rodape">
-  © Sistema de Ponto - LCSoftware
-  <div id="alterarNumeroDiv"><button onclick="alterarNumero()">Alterar Número WhatsApp</button></div>
+  © LCSoftware Ltda
+  <div id="alterarNumeroDiv"><button onclick="alterarNumero()">Alterar Número</button></div>
 </div>
 
 <!-- Modal Justificativa -->
@@ -135,25 +134,6 @@ textarea{resize:vertical;min-height:64px;}
     <div style="margin-top:10px;">
       <button onclick="enviarJustificativa()" style="background:#1976d2;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700">Enviar</button>
       <button onclick="fecharJustificativa()" style="background:#e53935;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700;margin-left:6px">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Alterar Cadastro -->
-<div id="modalCadastro" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:9999;">
-  <div style="width:100%;max-width:420px;background:#fff;color:#000;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:12px;">
-    <h3>Alterar Cadastro</h3>
-    <div style="width:100%;margin-bottom:10px;">
-      <label style="color:#000;font-weight:700;">Nome:</label>
-      <input type="text" id="editNome" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:4px;">
-    </div>
-    <div style="width:100%;margin-bottom:10px;">
-      <label style="color:#000;font-weight:700;">Cargo:</label>
-      <input type="text" id="editCargo" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:4px;">
-    </div>
-    <div style="margin-top:10px;">
-      <button onclick="salvarCadastro()" style="background:#1976d2;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700">Salvar</button>
-      <button onclick="fecharCadastro()" style="background:#e53935;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700;margin-left:6px">Cancelar</button>
     </div>
   </div>
 </div>
@@ -173,8 +153,7 @@ const EMAIL_DESTINO = 'pontocbh@gmail.com';
 /* ============================
    Variáveis e elementos
    ============================ */
-const KEY_PONTOS_DIA = 'pontosDia_v3';
-const KEY_CADASTRO_USUARIO = 'cadastroUsuario_v1';
+const KEY_PONTOS_DIA = 'pontosDia_v4';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
 
@@ -186,8 +165,8 @@ const botao = document.getElementById('baterPontoBtn');
 const relogioEl = document.getElementById('relogio');
 const visualizacaoPontos = document.getElementById('visualizacaoPontos');
 const inputSelfie = document.getElementById('inputSelfie');
-const connStatusEl = document.getElementById('connStatus');
 const pendCountEl = document.getElementById('pendCount');
+const pontosHojeCountEl = document.getElementById('pontosHojeCount');
 const warnGPS = document.getElementById('warnGPS');
 const lastThumb = document.getElementById('lastThumb');
 const toastContainer = document.getElementById('toastContainer');
@@ -197,64 +176,6 @@ let db = null;
 let dbReadyPromise = null;
 let numeroWhatsApp = localStorage.getItem('numeroWhatsApp');
 let numeroAlterado = localStorage.getItem('numeroAlterado');
-
-/* ============================
-   CARREGAR CADASTRO DO USUÁRIO
-   ============================ */
-function carregarCadastroUsuario() {
-    try {
-        const cadastroSalvo = localStorage.getItem(KEY_CADASTRO_USUARIO);
-        if (cadastroSalvo) {
-            const cadastro = JSON.parse(cadastroSalvo);
-            nomeUsuarioEl.value = cadastro.nome || '';
-            cargoUsuarioEl.value = cadastro.cargo || '';
-            console.log('Cadastro carregado:', cadastro);
-        }
-    } catch (e) {
-        console.warn('Erro ao carregar cadastro:', e);
-    }
-}
-
-/* ============================
-   SALVAR CADASTRO DO USUÁRIO
-   ============================ */
-function salvarCadastroUsuario() {
-    const nome = nomeUsuarioEl.value.trim();
-    const cargo = cargoUsuarioEl.value.trim();
-    
-    if (nome && cargo) {
-        const cadastro = {
-            nome: nome,
-            cargo: cargo,
-            dataCadastro: new Date().toISOString()
-        };
-        
-        try {
-            localStorage.setItem(KEY_CADASTRO_USUARIO, JSON.stringify(cadastro));
-            console.log('Cadastro salvo:', cadastro);
-        } catch (e) {
-            console.warn('Erro ao salvar cadastro:', e);
-        }
-    }
-}
-
-/* ============================
-   Verificação de Permissões GPS
-   ============================ */
-async function verificarPermissaoGPS() {
-    if (!navigator.permissions) {
-        return 'unknown';
-    }
-    
-    try {
-        const result = await navigator.permissions.query({ name: 'geolocation' });
-        console.log('Status permissão GPS:', result.state);
-        return result.state;
-    } catch (err) {
-        console.warn('Erro ao verificar permissão GPS:', err);
-        return 'unknown';
-    }
-}
 
 /* ============================
    Toast helper
@@ -337,34 +258,24 @@ function carregarLocalStorage(){
   try{
     const raw = localStorage.getItem(KEY_PONTOS_DIA);
     pontosDia = raw ? JSON.parse(raw) : [];
+    atualizarContadorPontosHoje();
   }catch(e){ pontosDia = []; }
   atualizarVisualizacaoResumo();
 }
+carregarLocalStorage();
+openDB().then(()=>{ atualizarPendCount(); sincronizarPontosPendentes(); }).catch(err=>console.warn('Erro abrir DB:', err));
 
-/* ============================
-   Inicialização completa
-   ============================ */
-function inicializarApp() {
-  carregarLocalStorage();
-  carregarCadastroUsuario(); // Carrega o cadastro salvo
-  
-  openDB().then(()=>{ 
-    atualizarPendCount(); 
-    sincronizarPontosPendentes(); 
-  }).catch(err=>console.warn('Erro abrir DB:', err));
-
-  // solicita número whatsapp se não houver
-  if(!numeroWhatsApp){
-    const input = prompt("Informe seu número do WhatsApp (somente números, ex: 5531999999999):");
-    if(input && /^\d{12,15}$/.test(input)){
-      numeroWhatsApp = input;
-      localStorage.setItem('numeroWhatsApp',numeroWhatsApp);
-    } else {
-      if(input) alert("Número inválido. Será solicitado novamente no próximo acesso.");
-    }
+/* solicita número whatsapp se não houver */
+if(!numeroWhatsApp){
+  const input = prompt("Informe seu número do WhatsApp (somente números, ex: 5531999999999):");
+  if(input && /^\d{12,15}$/.test(input)){
+    numeroWhatsApp = input;
+    localStorage.setItem('numeroWhatsApp',numeroWhatsApp);
+  } else {
+    if(input) alert("Número inválido. Será solicitado novamente no próximo acesso.");
   }
-  if(numeroAlterado==='sim'){ document.getElementById('alterarNumeroDiv').style.display='none'; }
 }
+if(numeroAlterado==='sim'){ document.getElementById('alterarNumeroDiv').style.display='none'; }
 
 /* ============================
    Relógio
@@ -377,37 +288,38 @@ setInterval(atualizarRelogio,1000);
 atualizarRelogio();
 
 /* ============================
-   Próximo Ponto (lógica simplificada sem condomínios)
+   Próximo Ponto - Sistema de 8 pontos (4 entradas + 4 saídas)
    ============================ */
 function proximoPonto(){
-  const pontosHoje = pontosDia.filter(p => p.data === new Date().toLocaleDateString('pt-BR'));
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const pontosHoje = pontosDia.filter(p => p.data === hoje);
   
-  // Se não há pontos hoje, começa com Entrada
-  if (pontosHoje.length === 0) return { tipo: "Entrada" };
+  // Sequência fixa: Entrada 1, Saída 1, Entrada 2, Saída 2, Entrada 3, Saída 3, Entrada 4, Saída 4
+  const sequencia = ['Entrada 1', 'Saída 1', 'Entrada 2', 'Saída 2', 'Entrada 3', 'Saída 3', 'Entrada 4', 'Saída 4'];
   
-  // Pega o último ponto
-  const ultimoPonto = pontosHoje[pontosHoje.length - 1];
-  
-  // Alterna entre Entrada e Saída
-  if (ultimoPonto.tipo === "Entrada") {
-    return { tipo: "Saída" };
-  } else {
-    return { tipo: "Entrada" };
+  // Encontra o próximo ponto baseado nos já registrados
+  for (let i = 0; i < sequencia.length; i++) {
+    const pontoExistente = pontosHoje.find(p => p.tipo === sequencia[i]);
+    if (!pontoExistente) {
+      return { tipo: sequencia[i], numero: i + 1 };
+    }
   }
+  
+  return null; // Todos os pontos já foram batidos
 }
 
 /* ============================
-   Conexão & Sincronização
+   Atualizar contador de pontos do dia
    ============================ */
-function atualizarConnStatus(){
-  const online = navigator.onLine;
-  connStatusEl.textContent = online ? 'Online' : 'Offline';
-  connStatusEl.style.color = online ? '#b9f6ca' : '#ff8a80';
+function atualizarContadorPontosHoje(){
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const pontosHoje = pontosDia.filter(p => p.data === hoje).length;
+  pontosHojeCountEl.textContent = `${pontosHoje}/8`;
 }
-window.addEventListener('online', ()=>{ atualizarConnStatus(); sincronizarPontosPendentes(); });
-window.addEventListener('offline', ()=>{ atualizarConnStatus(); });
-atualizarConnStatus();
 
+/* ============================
+   Sincronização
+   ============================ */
 async function atualizarPendCount(){
   try{
     const pendentes = await getAllPendingFromDB();
@@ -532,17 +444,15 @@ botao.addEventListener('click', async ()=>{
     return;
   }
 
-  // Salva o cadastro automaticamente quando bater ponto
-  salvarCadastroUsuario();
-
-  // determina próximo tipo
+  // Verifica se já bateu todos os pontos do dia
   const prox = proximoPonto();
   if(!prox){ 
-    mensagemConfirmacao.textContent='Todos os pontos já registrados!'; 
+    mensagemConfirmacao.textContent='Todos os 8 pontos já registrados hoje!'; 
+    showToast('Todos os pontos do dia já foram registrados', 'info', 3000);
     return; 
   }
 
-  // SOLICITAÇÃO GPS CORRIGIDA
+  // SOLICITAÇÃO GPS
   warnGPS.style.display = 'none';
   mensagemConfirmacao.textContent = 'Obtendo localização GPS...';
   
@@ -554,13 +464,15 @@ botao.addEventListener('click', async ()=>{
     
     const pos = await obterLocalizacaoComTimeout(20000);
     
-    mensagemConfirmacao.textContent = 'Localização obtida! Abrindo câmera...';
-    showToast('GPS OK! Abra a câmera para selfie', 'success', 2000);
+    mensagemConfirmacao.textContent = 'Localização obtida! Tirando selfie...';
+    showToast('GPS OK! Tirando selfie...', 'success', 2000);
     
     window._pendingLocation = pos;
     
     // Pequeno delay para usuário ver a mensagem
     setTimeout(() => {
+      // Abre diretamente a câmera frontal
+      inputSelfie.setAttribute('capture', 'user');
       inputSelfie.click();
     }, 800);
     
@@ -587,7 +499,7 @@ botao.addEventListener('click', async ()=>{
 });
 
 /* ============================
-   Fallback / captura selfie
+   Captura selfie e envio automático
    ============================ */
 inputSelfie.addEventListener('change', async (e)=>{
   const file = inputSelfie.files[0];
@@ -616,36 +528,39 @@ inputSelfie.addEventListener('change', async (e)=>{
       nome: nomeUsuarioEl.value.trim(),
       cargo: cargoUsuarioEl.value.trim(),
       tipo: prox.tipo,
+      numero: prox.numero,
       observacoes: observacoesEl.value.trim() || '',
       data: agora.toLocaleDateString('pt-BR'),
       hora: agora.toLocaleTimeString('pt-BR'),
       timestamp: agora.toISOString(),
       thumbnail: thumbDataUrl,
       localizacao: pos,
-      enviado: false
+      enviado: false,
+      fotoBlob: compressedBlob // Inclui a foto diretamente no objeto
     };
 
     // salva resumo localmente (localStorage)
     pontosDia.push(ponto);
     localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
-    lastThumb.src = thumbDataUrl; lastThumb.style.display = 'inline-block';
+    lastThumb.src = thumbDataUrl; 
+    lastThumb.style.display = 'inline-block';
     atualizarVisualizacaoResumo();
+    atualizarContadorPontosHoje();
 
-    // prepara objeto com blob para enviar/salvar
-    const pendingFull = Object.assign({}, ponto, { fotoBlob: compressedBlob });
-
+    // ENVIO AUTOMÁTICO - SEM INTERRUPÇÃO
+    mensagemConfirmacao.textContent = 'Enviando ponto automaticamente...';
+    
     if(navigator.onLine){
-      mensagemConfirmacao.textContent = 'Enviando ponto por email...';
       try{
-        await enviarPorEmail(pendingFull);
+        await enviarPorEmailAutomatico(ponto);
         ponto.enviado = true;
         localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
         mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (enviada)`;
-        showToast('Ponto enviado com sucesso!', 'success', 3000);
+        showToast('Ponto enviado automaticamente!', 'success', 3000);
       } catch(err){
         // se falhar, salva pendente
         try{
-          await addPendingToDB(pendingFull);
+          await addPendingToDB(ponto);
           mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (salva - pendente)`;
           showToast('Erro no envio. Ponto salvo como pendente.', 'error', 3500);
         }catch(dbErr){
@@ -659,7 +574,7 @@ inputSelfie.addEventListener('change', async (e)=>{
     } else {
       // offline -> salvar no indexedDB
       try{
-        await addPendingToDB(pendingFull);
+        await addPendingToDB(ponto);
         mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (offline - será enviada)`;
         showToast('Ponto salvo offline. Será sincronizado quando online.', 'info', 3200);
       }catch(err){
@@ -684,7 +599,61 @@ inputSelfie.addEventListener('change', async (e)=>{
 });
 
 /* ============================
-   ENVIO POR EMAIL (usando mailto com dados em anexo)
+   ENVIO AUTOMÁTICO POR EMAIL (sem interrupção)
+   ============================ */
+async function enviarPorEmailAutomatico(pontoObj) {
+    return new Promise((resolve, reject) => {
+        try {
+            const formData = new FormData();
+            
+            // Adiciona dados do ponto como texto
+            const dadosPonto = {
+                nome: pontoObj.nome,
+                cargo: pontoObj.cargo,
+                tipo: pontoObj.tipo,
+                numero: pontoObj.numero,
+                data: pontoObj.data,
+                hora: pontoObj.hora,
+                localizacao: `${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}`,
+                precisao: `±${pontoObj.localizacao.accuracy}m`,
+                observacoes: pontoObj.observacoes || 'Nenhuma',
+                timestamp: pontoObj.timestamp
+            };
+            
+            formData.append('dados', JSON.stringify(dadosPonto));
+            
+            // Adiciona a foto como anexo
+            const fotoFile = new File([pontoObj.fotoBlob], `selfie_${pontoObj.nome}_${pontoObj.data}_${pontoObj.hora.replace(/:/g,'-')}.jpg`, { type: 'image/jpeg' });
+            formData.append('foto', fotoFile);
+            
+            // Envia via fetch para um servidor de email
+            fetch('https://formspree.io/f/' + EMAIL_DESTINO, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    resolve(true);
+                } else {
+                    reject(new Error('Falha no envio do email'));
+                }
+            })
+            .catch(error => {
+                reject(error);
+            });
+            
+        } catch (error) {
+            console.error('Erro ao enviar email automático:', error);
+            reject(new Error('Falha ao enviar email automaticamente'));
+        }
+    });
+}
+
+/* ============================
+   ENVIO MANUAL POR EMAIL (fallback)
    ============================ */
 async function enviarPorEmail(pontoObj) {
     return new Promise((resolve, reject) => {
@@ -722,40 +691,6 @@ async function enviarPorEmail(pontoObj) {
             reject(new Error('Falha ao preparar envio por email'));
         }
     });
-}
-
-/* ============================
-   FUNÇÕES DE CADASTRO
-   ============================ */
-function alterarCadastro() {
-    // Preenche o modal com os dados atuais
-    document.getElementById('editNome').value = nomeUsuarioEl.value;
-    document.getElementById('editCargo').value = cargoUsuarioEl.value;
-    document.getElementById('modalCadastro').style.display = 'flex';
-}
-
-function fecharCadastro() {
-    document.getElementById('modalCadastro').style.display = 'none';
-}
-
-function salvarCadastro() {
-    const novoNome = document.getElementById('editNome').value.trim();
-    const novoCargo = document.getElementById('editCargo').value.trim();
-    
-    if (!novoNome || !novoCargo) {
-        alert('Preencha nome e cargo para salvar.');
-        return;
-    }
-    
-    // Atualiza os campos
-    nomeUsuarioEl.value = novoNome;
-    cargoUsuarioEl.value = novoCargo;
-    
-    // Salva no localStorage
-    salvarCadastroUsuario();
-    
-    showToast('Cadastro atualizado com sucesso!', 'success', 3000);
-    fecharCadastro();
 }
 
 /* ============================
@@ -900,18 +835,10 @@ document.addEventListener('click', (e)=>{
 });
 
 /* ============================
-   Inicialização CORRIGIDA
+   Inicialização
    ============================ */
 async function inicializar(){
-  atualizarConnStatus();
-  inicializarApp(); // Inicializa o app com todas as funções
-  
-  // Verificar permissão GPS
-  const permissao = await verificarPermissaoGPS();
-  if (permissao === 'denied') {
-    warnGPS.style.display = 'block';
-    warnGPS.innerHTML = 'Permissão de localização negada. Habilite em Configurações > Site Settings > Location';
-  }
+  carregarLocalStorage();
   
   // Teste simples de geolocation
   if (!navigator.geolocation) {
