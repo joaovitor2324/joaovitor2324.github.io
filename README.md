@@ -137,7 +137,7 @@ textarea{resize:vertical;min-height:64px;}
   </div>
 </div>
 
-<!-- Input frontal selfie (fallback) -->
+<!-- Input frontal selfie SEM opção de virar câmera -->
 <input type="file" accept="image/*" capture="user" id="inputSelfie" style="display:none">
 
 <!-- Toast container -->
@@ -145,14 +145,14 @@ textarea{resize:vertical;min-height:64px;}
 
 <script>
 /* ============================
-   CONFIGURAÇÃO DO FORMSPREE
+   CONFIGURAÇÃO DO FORMSPREE ATUALIZADA
    ============================ */
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv'; // Endpoint específico para pontocbh@gmail.com
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv'; // NOVO ENDPOINT CORRETO
 
 /* ============================
    Variáveis e elementos
    ============================ */
-const KEY_PONTOS_DIA = 'pontosDia_v4';
+const KEY_PONTOS_DIA = 'pontosDia_v6';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
 
@@ -317,44 +317,70 @@ function atualizarContadorPontosHoje(){
 }
 
 /* ============================
-   Sincronização
+   Sincronização CORRIGIDA
    ============================ */
 async function atualizarPendCount(){
   try{
     const pendentes = await getAllPendingFromDB();
     pendCountEl.textContent = pendentes.length;
-  } catch(e){ pendCountEl.textContent = '0'; }
-}
-
-async function sincronizarPontosPendentes(){
-  if(!navigator.onLine) return;
-  try{
-    const pendentes = await getAllPendingFromDB();
-    if(!pendentes || pendentes.length===0){ atualizarPendCount(); return; }
-    mensagemConfirmacao.textContent = `Sincronizando ${pendentes.length} ponto(s)...`;
-    for(const p of pendentes){
-      try{
-        await enviarPorEmailAutomatico(p);
-        await deletePendingFromDB(p._id);
-        const idx = pontosDia.findIndex(x => x._id === p._id);
-        if(idx !== -1){ pontosDia[idx].enviado = true; localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia)); }
-        showToast('Ponto sincronizado com sucesso', 'success', 2800);
-      } catch(err){
-        console.warn('Falha no envio pendente:', err);
-        mensagemConfirmacao.textContent = 'Sincronização interrompida - tentaremos novamente.';
-        break;
-      }
-    }
-  } catch(err){
-    console.warn('Erro sincronizar:', err);
-  } finally {
-    await atualizarPendCount();
-    atualizarVisualizacaoResumo();
-    setTimeout(()=> mensagemConfirmacao.textContent = '', 2500);
+  } catch(e){ 
+    pendCountEl.textContent = '0'; 
   }
 }
 
-setInterval(()=>{ if(navigator.onLine) sincronizarPontosPendentes(); }, 25000);
+async function sincronizarPontosPendentes(){
+  if(!navigator.onLine) {
+    console.log('Offline - sincronização adiada');
+    return;
+  }
+  
+  try{
+    const pendentes = await getAllPendingFromDB();
+    if(!pendentes || pendentes.length === 0){ 
+      await atualizarPendCount(); 
+      return; 
+    }
+    
+    console.log(`Sincronizando ${pendentes.length} ponto(s) pendentes...`);
+    
+    // Processa um por um para evitar sobrecarga
+    for(let i = 0; i < pendentes.length; i++){
+      const p = pendentes[i];
+      try{
+        console.log(`Enviando ponto ${i+1}/${pendentes.length}:`, p._id);
+        await enviarPorEmailAutomatico(p);
+        await deletePendingFromDB(p._id);
+        
+        // Atualiza status no localStorage
+        const idx = pontosDia.findIndex(x => x._id === p._id);
+        if(idx !== -1){ 
+          pontosDia[idx].enviado = true; 
+          localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia)); 
+        }
+        
+        console.log(`Ponto ${p._id} sincronizado com sucesso`);
+        
+      } catch(err){
+        console.warn(`Falha no envio do ponto ${p._id}:`, err);
+        // Continua com os próximos pontos em vez de parar
+        continue;
+      }
+    }
+    
+    // Atualiza interface após sincronização
+    await atualizarPendCount();
+    atualizarVisualizacaoResumo();
+    
+  } catch(err){
+    console.warn('Erro geral na sincronização:', err);
+  }
+}
+
+setInterval(()=>{ 
+  if(navigator.onLine) {
+    sincronizarPontosPendentes(); 
+  }
+}, 30000); // A cada 30 segundos
 
 /* ============================
    GEOLOCALIZAÇÃO SIMPLIFICADA e ROBUSTA
@@ -470,9 +496,28 @@ botao.addEventListener('click', async ()=>{
     
     // Pequeno delay para usuário ver a mensagem
     setTimeout(() => {
-      // Abre diretamente a câmera frontal
+      // FORÇA CÂMERA FRONTAL - método mais eficaz
       inputSelfie.setAttribute('capture', 'user');
-      inputSelfie.click();
+      inputSelfie.setAttribute('accept', 'image/*');
+      
+      // Tenta criar um input temporário para forçar câmera frontal
+      const tempInput = document.createElement('input');
+      tempInput.type = 'file';
+      tempInput.accept = 'image/*';
+      tempInput.capture = 'user'; // Isso força câmera frontal
+      tempInput.style.display = 'none';
+      
+      tempInput.onchange = function(e) {
+        const file = e.target.files[0];
+        if(file) {
+          processarSelfie(file, pos, prox);
+        }
+        document.body.removeChild(tempInput);
+      };
+      
+      document.body.appendChild(tempInput);
+      tempInput.click();
+      
     }, 800);
     
   } catch (err) {
@@ -498,20 +543,9 @@ botao.addEventListener('click', async ()=>{
 });
 
 /* ============================
-   Captura selfie e envio automático
+   Função separada para processar selfie
    ============================ */
-inputSelfie.addEventListener('change', async (e)=>{
-  const file = inputSelfie.files[0];
-  inputSelfie.value = '';
-  const prox = proximoPonto();
-  if(!prox) return;
-
-  const pos = window._pendingLocation || null;
-  if(!pos){
-    mensagemConfirmacao.textContent = 'Localização não disponível — ponto cancelado.';
-    showToast('Localização indisponível', 'error', 2400);
-    return;
-  }
+async function processarSelfie(file, pos, prox) {
   if(!file){
     mensagemConfirmacao.textContent = 'Selfie não selecionada — ponto cancelado.';
     showToast('Selfie não selecionada', 'error', 2400);
@@ -535,7 +569,7 @@ inputSelfie.addEventListener('change', async (e)=>{
       thumbnail: thumbDataUrl,
       localizacao: pos,
       enviado: false,
-      fotoBlob: compressedBlob // Inclui a foto diretamente no objeto
+      fotoBlob: compressedBlob
     };
 
     // salva resumo localmente (localStorage)
@@ -595,39 +629,39 @@ inputSelfie.addEventListener('change', async (e)=>{
     botao.style.pointerEvents = 'auto';
     botao.classList.remove('processing');
   }
-});
+}
 
 /* ============================
-   ENVIO AUTOMÁTICO POR EMAIL (sem interrupção)
+   ENVIO AUTOMÁTICO POR EMAIL COM FORMSPREE CORRETO
    ============================ */
 async function enviarPorEmailAutomatico(pontoObj) {
     return new Promise((resolve, reject) => {
         try {
             const formData = new FormData();
             
-            // Adiciona dados do ponto como texto
-            const dadosPonto = {
-                nome: pontoObj.nome,
-                cargo: pontoObj.cargo,
-                tipo: pontoObj.tipo,
-                numero: pontoObj.numero,
-                data: pontoObj.data,
-                hora: pontoObj.hora,
-                localizacao: `${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}`,
-                precisao: `±${pontoObj.localizacao.accuracy}m`,
-                observacoes: pontoObj.observacoes || 'Nenhuma',
-                timestamp: pontoObj.timestamp,
-                whatsapp: numeroWhatsApp || 'Não informado'
-            };
-            
-            formData.append('dados', JSON.stringify(dadosPonto, null, 2));
-            formData.append('assunto', `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`);
+            // Adiciona dados do ponto de forma organizada
+            formData.append('nome', pontoObj.nome);
+            formData.append('cargo', pontoObj.cargo);
+            formData.append('tipo_ponto', pontoObj.tipo);
+            formData.append('numero_ponto', pontoObj.numero.toString());
+            formData.append('data', pontoObj.data);
+            formData.append('hora', pontoObj.hora);
+            formData.append('localizacao', `${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}`);
+            formData.append('precisao', `±${pontoObj.localizacao.accuracy}m`);
+            formData.append('observacoes', pontoObj.observacoes || 'Nenhuma');
+            formData.append('whatsapp', numeroWhatsApp || 'Não informado');
+            formData.append('timestamp', pontoObj.timestamp);
+            formData.append('_subject', `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`);
             
             // Adiciona a foto como anexo
-            const fotoFile = new File([pontoObj.fotoBlob], `selfie_${pontoObj.nome.replace(/\s+/g,'_')}_${pontoObj.data}_${pontoObj.hora.replace(/:/g,'-')}.jpg`, { type: 'image/jpeg' });
+            const fotoFile = new File([pontoObj.fotoBlob], 
+                `selfie_${pontoObj.nome.replace(/\s+/g,'_')}_${pontoObj.data}_${pontoObj.tipo.replace(/\s+/g,'_')}.jpg`, 
+                { type: 'image/jpeg' });
             formData.append('foto', fotoFile);
             
-            // Envia via fetch para o Formspree
+            console.log('Enviando dados para Formspree...', FORMSPREE_ENDPOINT);
+            
+            // Envia via fetch para o Formspree CORRETO
             fetch(FORMSPREE_ENDPOINT, {
                 method: 'POST',
                 body: formData,
@@ -636,61 +670,22 @@ async function enviarPorEmailAutomatico(pontoObj) {
                 }
             })
             .then(response => {
+                console.log('Resposta do Formspree:', response.status, response.statusText);
                 if (response.ok) {
+                    showToast('Email enviado com sucesso!', 'success', 3000);
                     resolve(true);
                 } else {
-                    reject(new Error('Falha no envio do email'));
+                    reject(new Error(`Falha no envio: ${response.status} ${response.statusText}`));
                 }
             })
             .catch(error => {
+                console.error('Erro na requisição:', error);
                 reject(error);
             });
             
         } catch (error) {
             console.error('Erro ao enviar email automático:', error);
             reject(new Error('Falha ao enviar email automaticamente'));
-        }
-    });
-}
-
-/* ============================
-   ENVIO MANUAL POR EMAIL (fallback - caso precise)
-   ============================ */
-async function enviarPorEmail(pontoObj) {
-    return new Promise((resolve, reject) => {
-        try {
-            // Prepara o assunto do email
-            const assunto = `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`;
-            
-            // Prepara o corpo do email
-            let corpo = `REGISTRO DE PONTO\n\n`;
-            corpo += `Nome: ${pontoObj.nome}\n`;
-            corpo += `Cargo: ${pontoObj.cargo}\n`;
-            corpo += `Tipo: ${pontoObj.tipo}\n`;
-            corpo += `Data: ${pontoObj.data}\n`;
-            corpo += `Hora: ${pontoObj.hora}\n`;
-            corpo += `Localização: ${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}\n`;
-            corpo += `Precisão: ±${pontoObj.localizacao.accuracy}m\n`;
-            corpo += `WhatsApp: ${numeroWhatsApp || 'Não informado'}\n`;
-            
-            if (pontoObj.observacoes) {
-                corpo += `Observações: ${pontoObj.observacoes}\n`;
-            }
-            
-            corpo += `\n---\nEnviado via Sistema de Ponto LCSoftware`;
-            
-            // Cria URL mailto (fallback)
-            const mailtoUrl = `mailto:pontocbh@gmail.com?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-            
-            // Abre o cliente de email
-            window.location.href = mailtoUrl;
-            
-            showToast('Abra o cliente de email para enviar', 'info', 4000);
-            resolve(true);
-            
-        } catch (error) {
-            console.error('Erro ao preparar email:', error);
-            reject(new Error('Falha ao preparar envio por email'));
         }
     });
 }
