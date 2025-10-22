@@ -1,4 +1,4 @@
-[pontofinal1.txt](https://github.com/user-attachments/files/23062598/pontofinal1.txt)
+(https://github.com/user-attachments/files/23062598/pontofinal1.txt)
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
