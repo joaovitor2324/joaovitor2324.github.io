@@ -1,10 +1,9 @@
-[pontoteste.html](https://github.com/user-attachments/files/23044991/pontoteste.html)
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Registro de Ponto</title>
+<title>Sistema de Ponto</title>
 <!-- Forçar HTTPS para funcionamento do GPS -->
 <script>
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
@@ -76,10 +75,11 @@ textarea{resize:vertical;min-height:64px;}
   <button onclick="mostrarPontoDia()">Ponto do Dia</button>
   <button onclick="mostrarPontoMes()">Ponto do Mês</button>
   <button onclick="abrirJustificativa()">Falta/Atraso</button>
+  <button onclick="alterarCadastro()">Alterar Cadastro</button>
 </div>
 
 <div class="header">
-  <h1>Registro de Ponto</h1>
+  <h1>Sistema de Ponto</h1>
 </div>
 
 <main>
@@ -123,8 +123,8 @@ textarea{resize:vertical;min-height:64px;}
 </main>
 
 <div class="rodape">
-  © LCSoftware Ltda
-  <div id="alterarNumeroDiv"><button onclick="alterarNumero()">Alterar Número</button></div>
+  © Sistema de Ponto - LCSoftware
+  <div id="alterarNumeroDiv"><button onclick="alterarNumero()">Alterar Número WhatsApp</button></div>
 </div>
 
 <!-- Modal Justificativa -->
@@ -135,6 +135,25 @@ textarea{resize:vertical;min-height:64px;}
     <div style="margin-top:10px;">
       <button onclick="enviarJustificativa()" style="background:#1976d2;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700">Enviar</button>
       <button onclick="fecharJustificativa()" style="background:#e53935;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700;margin-left:6px">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Alterar Cadastro -->
+<div id="modalCadastro" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:9999;">
+  <div style="width:100%;max-width:420px;background:#fff;color:#000;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:12px;">
+    <h3>Alterar Cadastro</h3>
+    <div style="width:100%;margin-bottom:10px;">
+      <label style="color:#000;font-weight:700;">Nome:</label>
+      <input type="text" id="editNome" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:4px;">
+    </div>
+    <div style="width:100%;margin-bottom:10px;">
+      <label style="color:#000;font-weight:700;">Cargo:</label>
+      <input type="text" id="editCargo" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;margin-top:4px;">
+    </div>
+    <div style="margin-top:10px;">
+      <button onclick="salvarCadastro()" style="background:#1976d2;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700">Salvar</button>
+      <button onclick="fecharCadastro()" style="background:#e53935;color:#fff;padding:6px 12px;border:0;border-radius:6px;font-weight:700;margin-left:6px">Cancelar</button>
     </div>
   </div>
 </div>
@@ -155,6 +174,7 @@ const EMAIL_DESTINO = 'pontocbh@gmail.com';
    Variáveis e elementos
    ============================ */
 const KEY_PONTOS_DIA = 'pontosDia_v3';
+const KEY_CADASTRO_USUARIO = 'cadastroUsuario_v1';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
 
@@ -177,6 +197,46 @@ let db = null;
 let dbReadyPromise = null;
 let numeroWhatsApp = localStorage.getItem('numeroWhatsApp');
 let numeroAlterado = localStorage.getItem('numeroAlterado');
+
+/* ============================
+   CARREGAR CADASTRO DO USUÁRIO
+   ============================ */
+function carregarCadastroUsuario() {
+    try {
+        const cadastroSalvo = localStorage.getItem(KEY_CADASTRO_USUARIO);
+        if (cadastroSalvo) {
+            const cadastro = JSON.parse(cadastroSalvo);
+            nomeUsuarioEl.value = cadastro.nome || '';
+            cargoUsuarioEl.value = cadastro.cargo || '';
+            console.log('Cadastro carregado:', cadastro);
+        }
+    } catch (e) {
+        console.warn('Erro ao carregar cadastro:', e);
+    }
+}
+
+/* ============================
+   SALVAR CADASTRO DO USUÁRIO
+   ============================ */
+function salvarCadastroUsuario() {
+    const nome = nomeUsuarioEl.value.trim();
+    const cargo = cargoUsuarioEl.value.trim();
+    
+    if (nome && cargo) {
+        const cadastro = {
+            nome: nome,
+            cargo: cargo,
+            dataCadastro: new Date().toISOString()
+        };
+        
+        try {
+            localStorage.setItem(KEY_CADASTRO_USUARIO, JSON.stringify(cadastro));
+            console.log('Cadastro salvo:', cadastro);
+        } catch (e) {
+            console.warn('Erro ao salvar cadastro:', e);
+        }
+    }
+}
 
 /* ============================
    Verificação de Permissões GPS
@@ -280,20 +340,31 @@ function carregarLocalStorage(){
   }catch(e){ pontosDia = []; }
   atualizarVisualizacaoResumo();
 }
-carregarLocalStorage();
-openDB().then(()=>{ atualizarPendCount(); sincronizarPontosPendentes(); }).catch(err=>console.warn('Erro abrir DB:', err));
 
-/* solicita número whatsapp se não houver */
-if(!numeroWhatsApp){
-  const input = prompt("Informe seu número do WhatsApp (somente números, ex: 5531999999999):");
-  if(input && /^\d{12,15}$/.test(input)){
-    numeroWhatsApp = input;
-    localStorage.setItem('numeroWhatsApp',numeroWhatsApp);
-  } else {
-    if(input) alert("Número inválido. Será solicitado novamente no próximo acesso.");
+/* ============================
+   Inicialização completa
+   ============================ */
+function inicializarApp() {
+  carregarLocalStorage();
+  carregarCadastroUsuario(); // Carrega o cadastro salvo
+  
+  openDB().then(()=>{ 
+    atualizarPendCount(); 
+    sincronizarPontosPendentes(); 
+  }).catch(err=>console.warn('Erro abrir DB:', err));
+
+  // solicita número whatsapp se não houver
+  if(!numeroWhatsApp){
+    const input = prompt("Informe seu número do WhatsApp (somente números, ex: 5531999999999):");
+    if(input && /^\d{12,15}$/.test(input)){
+      numeroWhatsApp = input;
+      localStorage.setItem('numeroWhatsApp',numeroWhatsApp);
+    } else {
+      if(input) alert("Número inválido. Será solicitado novamente no próximo acesso.");
+    }
   }
+  if(numeroAlterado==='sim'){ document.getElementById('alterarNumeroDiv').style.display='none'; }
 }
-if(numeroAlterado==='sim'){ document.getElementById('alterarNumeroDiv').style.display='none'; }
 
 /* ============================
    Relógio
@@ -460,6 +531,9 @@ botao.addEventListener('click', async ()=>{
     showToast('Preencha nome e cargo', 'error', 2600);
     return;
   }
+
+  // Salva o cadastro automaticamente quando bater ponto
+  salvarCadastroUsuario();
 
   // determina próximo tipo
   const prox = proximoPonto();
@@ -651,6 +725,40 @@ async function enviarPorEmail(pontoObj) {
 }
 
 /* ============================
+   FUNÇÕES DE CADASTRO
+   ============================ */
+function alterarCadastro() {
+    // Preenche o modal com os dados atuais
+    document.getElementById('editNome').value = nomeUsuarioEl.value;
+    document.getElementById('editCargo').value = cargoUsuarioEl.value;
+    document.getElementById('modalCadastro').style.display = 'flex';
+}
+
+function fecharCadastro() {
+    document.getElementById('modalCadastro').style.display = 'none';
+}
+
+function salvarCadastro() {
+    const novoNome = document.getElementById('editNome').value.trim();
+    const novoCargo = document.getElementById('editCargo').value.trim();
+    
+    if (!novoNome || !novoCargo) {
+        alert('Preencha nome e cargo para salvar.');
+        return;
+    }
+    
+    // Atualiza os campos
+    nomeUsuarioEl.value = novoNome;
+    cargoUsuarioEl.value = novoCargo;
+    
+    // Salva no localStorage
+    salvarCadastroUsuario();
+    
+    showToast('Cadastro atualizado com sucesso!', 'success', 3000);
+    fecharCadastro();
+}
+
+/* ============================
    Compressão helpers
    ============================ */
 function compressImageFileToJpegBlob(file, maxWidth = 800, quality = 0.75){
@@ -796,7 +904,7 @@ document.addEventListener('click', (e)=>{
    ============================ */
 async function inicializar(){
   atualizarConnStatus();
-  carregarLocalStorage();
+  inicializarApp(); // Inicializa o app com todas as funções
   
   // Verificar permissão GPS
   const permissao = await verificarPermissaoGPS();
