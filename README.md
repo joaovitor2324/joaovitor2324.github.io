@@ -1,3 +1,4 @@
+[pontofinal.html](https://github.com/user-attachments/files/23062297/pontofinal.html)
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
@@ -147,7 +148,7 @@ textarea{resize:vertical;min-height:64px;}
 /* ============================
    CONFIGURAÇÃO DE EMAIL
    ============================ */
-const EMAIL_DESTINO = 'pontocbh@gmail.com';
+const pontocbh@gmail.com = 'pontocbh@gmail.com';
 
 /* ============================
    Variáveis e elementos
@@ -626,7 +627,7 @@ async function enviarPorEmailAutomatico(pontoObj) {
             formData.append('foto', fotoFile);
             
             // Envia via fetch para um servidor de email
-            fetch('https://formspree.io/f/' + EMAIL_DESTINO, {
+            fetch('https://formspree.io/f/' + pontocbh@gmail.com, {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -677,7 +678,7 @@ async function enviarPorEmail(pontoObj) {
             corpo += `\n---\nEnviado via Sistema de Ponto LCSoftware`;
             
             // Cria URL mailto
-            const mailtoUrl = `mailto:${EMAIL_DESTINO}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+            const mailtoUrl = `mailto:${pontocbh@gmail.com}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
             
             // Abre o cliente de email
             window.location.href = mailtoUrl;
