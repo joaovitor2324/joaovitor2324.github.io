@@ -1,3 +1,4 @@
+[pontofinal1.txt](https://github.com/user-attachments/files/23062598/pontofinal1.txt)
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
@@ -145,9 +146,9 @@ textarea{resize:vertical;min-height:64px;}
 
 <script>
 /* ============================
-   CONFIGURAÇÃO DE EMAIL
+   CONFIGURAÇÃO DO FORMSPREE
    ============================ */
-const pontocbh@gmail.com = 'pontocbh@gmail.com';
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xjvjvjgg'; // Endpoint específico para pontocbh@gmail.com
 
 /* ============================
    Variáveis e elementos
@@ -334,7 +335,7 @@ async function sincronizarPontosPendentes(){
     mensagemConfirmacao.textContent = `Sincronizando ${pendentes.length} ponto(s)...`;
     for(const p of pendentes){
       try{
-        await enviarPorEmail(p);
+        await enviarPorEmailAutomatico(p);
         await deletePendingFromDB(p._id);
         const idx = pontosDia.findIndex(x => x._id === p._id);
         if(idx !== -1){ pontosDia[idx].enviado = true; localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia)); }
@@ -616,17 +617,19 @@ async function enviarPorEmailAutomatico(pontoObj) {
                 localizacao: `${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}`,
                 precisao: `±${pontoObj.localizacao.accuracy}m`,
                 observacoes: pontoObj.observacoes || 'Nenhuma',
-                timestamp: pontoObj.timestamp
+                timestamp: pontoObj.timestamp,
+                whatsapp: numeroWhatsApp || 'Não informado'
             };
             
-            formData.append('dados', JSON.stringify(dadosPonto));
+            formData.append('dados', JSON.stringify(dadosPonto, null, 2));
+            formData.append('assunto', `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`);
             
             // Adiciona a foto como anexo
-            const fotoFile = new File([pontoObj.fotoBlob], `selfie_${pontoObj.nome}_${pontoObj.data}_${pontoObj.hora.replace(/:/g,'-')}.jpg`, { type: 'image/jpeg' });
+            const fotoFile = new File([pontoObj.fotoBlob], `selfie_${pontoObj.nome.replace(/\s+/g,'_')}_${pontoObj.data}_${pontoObj.hora.replace(/:/g,'-')}.jpg`, { type: 'image/jpeg' });
             formData.append('foto', fotoFile);
             
-            // Envia via fetch para um servidor de email
-            fetch('https://formspree.io/f/' + pontocbh@gmail.com, {
+            // Envia via fetch para o Formspree
+            fetch(FORMSPREE_ENDPOINT, {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -652,7 +655,7 @@ async function enviarPorEmailAutomatico(pontoObj) {
 }
 
 /* ============================
-   ENVIO MANUAL POR EMAIL (fallback)
+   ENVIO MANUAL POR EMAIL (fallback - caso precise)
    ============================ */
 async function enviarPorEmail(pontoObj) {
     return new Promise((resolve, reject) => {
@@ -669,6 +672,7 @@ async function enviarPorEmail(pontoObj) {
             corpo += `Hora: ${pontoObj.hora}\n`;
             corpo += `Localização: ${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}\n`;
             corpo += `Precisão: ±${pontoObj.localizacao.accuracy}m\n`;
+            corpo += `WhatsApp: ${numeroWhatsApp || 'Não informado'}\n`;
             
             if (pontoObj.observacoes) {
                 corpo += `Observações: ${pontoObj.observacoes}\n`;
@@ -676,8 +680,8 @@ async function enviarPorEmail(pontoObj) {
             
             corpo += `\n---\nEnviado via Sistema de Ponto LCSoftware`;
             
-            // Cria URL mailto
-            const mailtoUrl = `mailto:${pontocbh@gmail.com}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+            // Cria URL mailto (fallback)
+            const mailtoUrl = `mailto:pontocbh@gmail.com?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
             
             // Abre o cliente de email
             window.location.href = mailtoUrl;
