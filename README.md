@@ -1,4 +1,3 @@
-[pontofinal.html](https://github.com/user-attachments/files/23062297/pontofinal.html)
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
