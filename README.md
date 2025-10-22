@@ -147,7 +147,7 @@ textarea{resize:vertical;min-height:64px;}
 /* ============================
    CONFIGURAÇÃO DO FORMSPREE
    ============================ */
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xjvjvjgg'; // Endpoint específico para pontocbh@gmail.com
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv'; // Endpoint específico para pontocbh@gmail.com
 
 /* ============================
    Variáveis e elementos
