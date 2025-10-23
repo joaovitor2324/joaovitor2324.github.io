@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
@@ -527,8 +526,8 @@ async function enviarPorEmail(pontoObj) {
       selfieBase64: base64
     };
 
-    // USA A NOVA FUNÇÃO COM CORS
-    const res = await fetchWithCORS(WEBAPP_URL, {
+    // USA FETCH NORMAL - O APPS SCRIPT JÁ DEVE LIDAR COM CORS
+    const res = await fetch(WEBAPP_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'application/json' }
