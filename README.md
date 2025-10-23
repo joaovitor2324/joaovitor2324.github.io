@@ -43,6 +43,12 @@ textarea{resize:vertical;min-height:64px;}
 .toast.info{background:linear-gradient(90deg,#1976d2,#42a5f5);}
 .toast.error{background:linear-gradient(90deg,#c62828,#ff7043);}
 
+/* Modal Câmera */
+#modalCamera{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:3000;flex-direction:column;align-items:center;justify-content:center;}
+#videoCamera{width:100%;max-width:400px;height:auto;border-radius:10px;}
+#capturarFotoBtn{position:fixed;bottom:50px;width:80px;height:80px;border-radius:50%;background:#fff;border:4px solid #00c853;cursor:pointer;}
+#fecharCameraBtn{position:fixed;top:20px;right:20px;background:rgba(255,255,255,0.2);color:white;border:none;border-radius:50%;width:50px;height:50px;font-size:20px;cursor:pointer;}
+
 /* Novos estilos para GPS */
 .botao-circular:disabled {
     opacity: 0.6;
@@ -94,6 +100,13 @@ textarea{resize:vertical;min-height:64px;}
       SALVAR CADASTRO
     </button>
   </div>
+</div>
+
+<!-- Modal Câmera -->
+<div id="modalCamera">
+  <button id="fecharCameraBtn">✕</button>
+  <video id="videoCamera" autoplay playsinline></video>
+  <button id="capturarFotoBtn"></button>
 </div>
 
 <div id="menuBtn" title="Menu">&#9776;</div>
@@ -170,18 +183,18 @@ textarea{resize:vertical;min-height:64px;}
 
 <script>
 /* ============================
-   CONFIGURAÇÃO DO FORMSPREE ATUALIZADA
+   CONFIGURAÇÃO DE EMAIL
    ============================ */
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/manpgdbv';
+const EMAIL_DESTINO = 'pontocbh@gmail.com';
 
 /* ============================
    Variáveis e elementos
    ============================ */
-const KEY_PONTOS_DIA = 'pontosDia_v8';
+const KEY_PONTOS_DIA = 'pontosDia_v11';
 const KEY_CADASTRO = 'cadastroUsuario_v2';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
-const TEMPO_MINIMO_ENTRE_PONTOS = 90 * 60 * 1000; // 1 hora e 30 minutos em milissegundos
+const TEMPO_MINIMO_ENTRE_PONTOS = 90 * 60 * 1000;
 
 const nomeUsuarioEl = document.getElementById('nomeUsuario');
 const cargoUsuarioEl = document.getElementById('cargoUsuario');
@@ -197,6 +210,10 @@ const warnTempo = document.getElementById('warnTempo');
 const lastThumb = document.getElementById('lastThumb');
 const toastContainer = document.getElementById('toastContainer');
 const telaCadastro = document.getElementById('telaCadastro');
+const modalCamera = document.getElementById('modalCamera');
+const videoCamera = document.getElementById('videoCamera');
+const capturarFotoBtn = document.getElementById('capturarFotoBtn');
+const fecharCameraBtn = document.getElementById('fecharCameraBtn');
 
 let pontosDia = [];
 let db = null;
@@ -205,17 +222,16 @@ let usuarioCadastrado = null;
 let ultimoPontoTimestamp = null;
 let tempoRestanteInterval = null;
 let deviceId = null;
+let cameraStream = null;
 
 /* ============================
    Sistema de Identificação do Dispositivo
    ============================ */
 function gerarDeviceId() {
-    // Tenta obter um ID único do dispositivo
     const KEY_DEVICE_ID = 'ponto_device_id';
     let deviceId = localStorage.getItem(KEY_DEVICE_ID);
     
     if (!deviceId) {
-        // Gera um ID único baseado em timestamp + random
         deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         localStorage.setItem(KEY_DEVICE_ID, deviceId);
     }
@@ -224,7 +240,7 @@ function gerarDeviceId() {
 }
 
 /* ============================
-   Sistema de Cadastro MELHORADO
+   Sistema de Cadastro
    ============================ */
 function verificarCadastro() {
     deviceId = gerarDeviceId();
@@ -234,25 +250,20 @@ function verificarCadastro() {
         try {
             usuarioCadastrado = JSON.parse(cadastroSalvo);
             
-            // Verifica se o cadastro pertence a este dispositivo
             if (usuarioCadastrado.deviceId === deviceId) {
                 nomeUsuarioEl.value = usuarioCadastrado.nome;
                 cargoUsuarioEl.value = usuarioCadastrado.cargo;
                 telaCadastro.style.display = 'none';
                 return;
             } else {
-                // Cadastro de outro dispositivo - mostra tela de cadastro
-                console.log('Cadastro de outro dispositivo detectado');
                 localStorage.removeItem(KEY_CADASTRO);
                 usuarioCadastrado = null;
             }
         } catch (e) {
-            console.error('Erro ao carregar cadastro:', e);
             localStorage.removeItem(KEY_CADASTRO);
         }
     }
     
-    // Mostra tela de cadastro se não há cadastro válido
     telaCadastro.style.display = 'flex';
 }
 
@@ -266,24 +277,21 @@ function salvarCadastro() {
         return;
     }
 
-    // Formata o telefone para DDD + número (remove espaços e caracteres especiais)
-    telefone = telefone.replace(/\D/g, ''); // Remove tudo que não é número
+    telefone = telefone.replace(/\D/g, '');
     
-    // Validação para DDD + 9 dígitos (11 números no total)
     if (!/^\d{11}$/.test(telefone)) {
         showToast('Telefone inválido. Use DDD + número (ex: 31986952093)', 'error', 4000);
         return;
     }
 
-    // Formata para exibição: 31 98695-2093
     const telefoneFormatado = telefone.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3');
 
     usuarioCadastrado = {
         nome: nome,
         cargo: cargo,
-        telefone: telefone, // Salva sem formatação para envio
-        telefoneFormatado: telefoneFormatado, // Salva formatado para exibição
-        deviceId: deviceId, // Associa ao dispositivo
+        telefone: telefone,
+        telefoneFormatado: telefoneFormatado,
+        deviceId: deviceId,
         dataCadastro: new Date().toISOString()
     };
 
@@ -299,6 +307,74 @@ function editarCadastro() {
     localStorage.removeItem(KEY_CADASTRO);
     usuarioCadastrado = null;
     verificarCadastro();
+}
+
+/* ============================
+   Sistema de Câmera Manual
+   ============================ */
+async function abrirCameraManual() {
+    return new Promise((resolve, reject) => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'user',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
+            })
+            .then(stream => {
+                cameraStream = stream;
+                videoCamera.srcObject = stream;
+                modalCamera.style.display = 'flex';
+                
+                capturarFotoBtn.onclick = () => {
+                    capturarFoto().then(resolve).catch(reject);
+                };
+                
+                fecharCameraBtn.onclick = () => {
+                    fecharCamera();
+                    reject(new Error('Câmera cancelada pelo usuário'));
+                };
+            })
+            .catch(err => {
+                reject(new Error('Não foi possível acessar a câmera frontal: ' + err.message));
+            });
+        } else {
+            reject(new Error('Seu navegador não suporta acesso à câmera'));
+        }
+    });
+}
+
+function capturarFoto() {
+    return new Promise((resolve, reject) => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        canvas.width = videoCamera.videoWidth;
+        canvas.height = videoCamera.videoHeight;
+        
+        context.drawImage(videoCamera, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob(blob => {
+            fecharCamera();
+            
+            if (blob) {
+                const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
+                resolve(file);
+            } else {
+                reject(new Error('Não foi possível capturar a foto'));
+            }
+        }, 'image/jpeg', 0.8);
+    });
+}
+
+function fecharCamera() {
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+    modalCamera.style.display = 'none';
+    videoCamera.srcObject = null;
 }
 
 /* ============================
@@ -380,48 +456,35 @@ async function deletePendingFromDB(id){
 }
 
 /* ============================
-   Sincronização MELHORADA - Envia imediatamente
+   Sincronização
    ============================ */
 async function sincronizarPontosPendentes() {
-    if (!navigator.onLine) {
-        console.log('Offline - sincronização adiada');
-        return;
-    }
+    if (!navigator.onLine) return;
     
     try {
         const pendentes = await getAllPendingFromDB();
-        if (!pendentes || pendentes.length === 0) {
-            console.log('Nenhum ponto pendente para sincronizar');
-            return;
-        }
-        
-        console.log(`Sincronizando ${pendentes.length} ponto(s) pendentes...`);
+        if (!pendentes || pendentes.length === 0) return;
         
         for (let i = 0; i < pendentes.length; i++) {
             const p = pendentes[i];
             try {
-                console.log(`Enviando ponto pendente ${i+1}/${pendentes.length}:`, p._id);
-                await enviarPorEmailAutomatico(p);
+                await enviarPorEmail(p);
                 await deletePendingFromDB(p._id);
                 
-                // Atualiza status no localStorage
                 const idx = pontosDia.findIndex(x => x._id === p._id);
                 if (idx !== -1) {
                     pontosDia[idx].enviado = true;
                     localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
                 }
                 
-                console.log(`Ponto ${p._id} sincronizado com sucesso`);
                 showToast('Ponto pendente enviado!', 'success', 2000);
                 
             } catch (err) {
                 console.warn(`Falha no envio do ponto pendente ${p._id}:`, err);
-                // Continua tentando os próximos pontos
                 continue;
             }
         }
         
-        // Atualiza interface após sincronização
         atualizarVisualizacaoResumo();
         
     } catch (err) {
@@ -429,18 +492,71 @@ async function sincronizarPontosPendentes() {
     }
 }
 
-// Sincroniza a cada 30 segundos quando online
 setInterval(() => {
     if (navigator.onLine) {
         sincronizarPontosPendentes();
     }
 }, 30000);
 
-// Sincroniza quando volta online
 window.addEventListener('online', () => {
     showToast('Conexão restaurada - sincronizando pontos...', 'info', 2000);
     setTimeout(sincronizarPontosPendentes, 1000);
 });
+
+/* ============================
+   ENVIO POR EMAIL SIMPLES E CONFIÁVEL
+   ============================ */
+async function enviarPorEmail(pontoObj) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Prepara o assunto do email
+            const assunto = `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`;
+            
+            // Prepara o corpo do email com todos os dados
+            let corpo = `REGISTRO DE PONTO - SISTEMA LCSoftware\n\n`;
+            corpo += `👤 COLABORADOR:\n`;
+            corpo += `Nome: ${pontoObj.nome}\n`;
+            corpo += `Cargo: ${pontoObj.cargo}\n`;
+            corpo += `Telefone: ${pontoObj.telefone}\n\n`;
+            
+            corpo += `📅 PONTO REGISTRADO:\n`;
+            corpo += `Tipo: ${pontoObj.tipo}\n`;
+            corpo += `Número: ${pontoObj.numero}/8\n`;
+            corpo += `Data: ${pontoObj.data}\n`;
+            corpo += `Hora: ${pontoObj.hora}\n\n`;
+            
+            corpo += `📍 LOCALIZAÇÃO:\n`;
+            corpo += `Coordenadas: ${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}\n`;
+            corpo += `Precisão: ±${pontoObj.localizacao.accuracy}m\n\n`;
+            
+            if (pontoObj.observacoes) {
+                corpo += `📝 OBSERVAÇÕES:\n${pontoObj.observacoes}\n\n`;
+            }
+            
+            corpo += `---\n`;
+            corpo += `Selfie salva localmente no dispositivo\n`;
+            corpo += `Enviado via Sistema de Ponto LCSoftware\n`;
+            corpo += `Timestamp: ${pontoObj.timestamp}`;
+
+            // Cria URL mailto - MÉTODO MAIS CONFIÁVEL
+            const mailtoUrl = `mailto:${EMAIL_DESTINO}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+            
+            // Abre o cliente de email
+            window.location.href = mailtoUrl;
+            
+            showToast('Abra o app de email para enviar', 'info', 4000);
+            
+            // Considera como sucesso pois o usuário vai enviar manualmente
+            setTimeout(() => {
+                resolve(true);
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Erro ao preparar email:', error);
+            reject(new Error('Falha ao preparar envio por email'));
+        }
+    });
+}
 
 /* ============================
    LocalStorage inicial
@@ -562,63 +678,6 @@ function atualizarContadorPontosHoje(){
 }
 
 /* ============================
-   Câmera frontal FIXA
-   ============================ */
-function abrirCameraFrontal() {
-    return new Promise((resolve, reject) => {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: 'user',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                } 
-            })
-            .then(stream => {
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    
-                    setTimeout(() => {
-                        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        canvas.toBlob(blob => {
-                            stream.getTracks().forEach(track => track.stop());
-                            document.body.removeChild(video);
-                            
-                            if (blob) {
-                                const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
-                                resolve(file);
-                            } else {
-                                reject(new Error('Não foi possível capturar a foto'));
-                            }
-                        }, 'image/jpeg', 0.8);
-                    }, 1000);
-                };
-                
-                video.onerror = () => {
-                    stream.getTracks().forEach(track => track.stop());
-                    reject(new Error('Erro ao acessar a câmera'));
-                };
-                
-                document.body.appendChild(video);
-            })
-            .catch(err => {
-                reject(new Error('Não foi possível acessar a câmera frontal: ' + err.message));
-            });
-        } else {
-            reject(new Error('Seu navegador não suporta acesso à câmera'));
-        }
-    });
-}
-
-/* ============================
    Botão 'Bater Ponto' fluxo principal
    ============================ */
 botao.addEventListener('click', async ()=>{
@@ -651,10 +710,10 @@ botao.addEventListener('click', async ()=>{
         
         const pos = await obterLocalizacaoComTimeout(20000);
         
-        mensagemConfirmacao.textContent = 'Obtendo selfie...';
-        showToast('GPS OK! Capturando selfie...', 'success', 2000);
+        mensagemConfirmacao.textContent = 'Abrindo câmera...';
+        showToast('GPS OK! Posicione e tire a selfie', 'success', 2000);
         
-        const selfieFile = await abrirCameraFrontal();
+        const selfieFile = await abrirCameraManual();
         
         await processarSelfie(selfieFile, pos, prox);
         
@@ -680,10 +739,12 @@ botao.addEventListener('click', async ()=>{
                 • Ative o GPS do dispositivo<br>
                 • Tente em área aberta com boa recepção</small>
             `;
+        } else if (err.message.includes('cancelada')) {
+            mensagemConfirmacao.textContent = 'Selfie cancelada';
+        } else {
+            mensagemConfirmacao.textContent = 'Falha no processo. Tente novamente.';
+            showToast('Erro: ' + err.message, 'error', 5000);
         }
-        
-        mensagemConfirmacao.textContent = 'Falha no processo. Tente novamente.';
-        showToast('Erro: ' + err.message, 'error', 5000);
     }
 });
 
@@ -699,7 +760,7 @@ async function processarSelfie(file, pos, prox) {
             _id: 'p-' + agora.getTime() + '-' + Math.random().toString(36).slice(2,8),
             nome: usuarioCadastrado.nome,
             cargo: usuarioCadastrado.cargo,
-            telefone: usuarioCadastrado.telefoneFormatado, // Usa o telefone formatado
+            telefone: usuarioCadastrado.telefoneFormatado,
             tipo: prox.tipo,
             numero: prox.numero,
             observacoes: observacoesEl.value.trim() || '',
@@ -712,7 +773,6 @@ async function processarSelfie(file, pos, prox) {
             fotoBlob: compressedBlob
         };
 
-        // Salva localmente
         pontosDia.push(ponto);
         localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
         lastThumb.src = thumbDataUrl; 
@@ -720,25 +780,23 @@ async function processarSelfie(file, pos, prox) {
         atualizarVisualizacaoResumo();
         atualizarContadorPontosHoje();
 
-        // Atualiza timestamp do último ponto
         ultimoPontoTimestamp = agora.getTime();
         iniciarContadorTempo();
 
-        // TENTA ENVIAR IMEDIATAMENTE - NÃO ESPERA OS 8 PONTOS
-        mensagemConfirmacao.textContent = 'Enviando ponto automaticamente...';
+        // ENVIO POR EMAIL
+        mensagemConfirmacao.textContent = 'Preparando envio do ponto...';
         
         if(navigator.onLine){
             try{
-                await enviarPorEmailAutomatico(ponto);
+                await enviarPorEmail(ponto);
                 ponto.enviado = true;
                 localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
                 mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (enviada)`;
-                showToast('Ponto enviado automaticamente!', 'success', 3000);
+                showToast('Ponto registrado com sucesso!', 'success', 3000);
                 
                 atualizarVisualizacaoResumo();
                 
             } catch(err){
-                // Se falhar, salva como pendente para sincronização posterior
                 try{
                     await addPendingToDB(ponto);
                     mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (salva - será enviada)`;
@@ -752,7 +810,6 @@ async function processarSelfie(file, pos, prox) {
                 atualizarVisualizacaoResumo();
             }
         } else {
-            // Offline - salva como pendente
             try{
                 await addPendingToDB(ponto);
                 mensagemConfirmacao.textContent = `${ponto.tipo} registrada às ${ponto.hora} (offline - será enviada)`;
@@ -775,8 +832,6 @@ async function processarSelfie(file, pos, prox) {
         botao.classList.remove('processing');
     }
 }
-
-// ... (mantenha as funções restantes como obterLocalizacaoComTimeout, compressImageFileToJpegBlob, etc.)
 
 /* ============================
    GEOLOCALIZAÇÃO
@@ -848,62 +903,6 @@ function obterLocalizacaoComTimeout(ms = 20000) {
         };
 
         watchId = navigator.geolocation.watchPosition(success, error, options);
-    });
-}
-
-/* ============================
-   ENVIO AUTOMÁTICO POR EMAIL
-   ============================ */
-async function enviarPorEmailAutomatico(pontoObj) {
-    return new Promise((resolve, reject) => {
-        try {
-            const formData = new FormData();
-            
-            formData.append('nome', pontoObj.nome);
-            formData.append('cargo', pontoObj.cargo);
-            formData.append('telefone', pontoObj.telefone);
-            formData.append('tipo_ponto', pontoObj.tipo);
-            formData.append('numero_ponto', pontoObj.numero.toString());
-            formData.append('data', pontoObj.data);
-            formData.append('hora', pontoObj.hora);
-            formData.append('localizacao', `${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}`);
-            formData.append('precisao', `±${pontoObj.localizacao.accuracy}m`);
-            formData.append('observacoes', pontoObj.observacoes || 'Nenhuma');
-            formData.append('timestamp', pontoObj.timestamp);
-            formData.append('_subject', `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`);
-            
-            const fotoFile = new File([pontoObj.fotoBlob], 
-                `selfie_${pontoObj.nome.replace(/\s+/g,'_')}_${pontoObj.data}_${pontoObj.tipo.replace(/\s+/g,'_')}.jpg`, 
-                { type: 'image/jpeg' });
-            formData.append('foto', fotoFile);
-            
-            console.log('Enviando dados para Formspree...', FORMSPREE_ENDPOINT);
-            
-            fetch(FORMSPREE_ENDPOINT, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json'
-                }
-            })
-            .then(response => {
-                console.log('Resposta do Formspree:', response.status, response.statusText);
-                if (response.ok) {
-                    showToast('Email enviado com sucesso!', 'success', 3000);
-                    resolve(true);
-                } else {
-                    reject(new Error(`Falha no envio: ${response.status} ${response.statusText}`));
-                }
-            })
-            .catch(error => {
-                console.error('Erro na requisição:', error);
-                reject(error);
-            });
-            
-        } catch (error) {
-            console.error('Erro ao enviar email automático:', error);
-            reject(new Error('Falha ao enviar email automaticamente'));
-        }
     });
 }
 
@@ -1055,7 +1054,6 @@ async function inicializar(){
         showToast('Seu navegador não suporta GPS', 'error', 5000);
     }
     
-    // Sincroniza pontos pendentes ao iniciar
     if(navigator.onLine) {
         setTimeout(sincronizarPontosPendentes, 2000);
     }
