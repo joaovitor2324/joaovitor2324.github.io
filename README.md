@@ -185,7 +185,7 @@
 /* ============================
    CONFIGURAÇÃO DO WEBAPP
    ============================ */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbz97yqwIwPyBrSckAYDsXvEUqsIuRzScz3pYeaVJBA5M7ffccCVSbbZ-KuX6ZysREt-/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw08-sk6Sl7dieQ-CjyalbQwqZplZoYwYJdb3oCHAbjbz0st4Ic30TuLLZUbQmoAFEb/exec';
 const WEBAPP_SECRET = 'Pontobh#4'; // mesmo do Apps Script
 
 /* ============================
