@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
@@ -185,7 +186,7 @@
 /* ============================
    CONFIGURAÇÃO DO WEBAPP
    ============================ */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxnJmPxz9hVvefuX571RQkavnZvinmS19ezfG-sPMyn_hR3OKL_HztrabbWuaOgMe0B/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw08-sk6Sl7dieQ-CjyalbQwqZplZoYwYJdb3oCHAbjbz0st4Ic30TuLLZUbQmoAFEb/exec';
 const WEBAPP_SECRET = 'Pontobh#4'; // mesmo do Apps Script
 
 /* ============================
@@ -526,7 +527,8 @@ async function enviarPorEmail(pontoObj) {
       selfieBase64: base64
     };
 
-    const res = await fetch(WEBAPP_URL, {
+    // USA A NOVA FUNÇÃO COM CORS
+    const res = await fetchWithCORS(WEBAPP_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'application/json' }
