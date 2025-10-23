@@ -526,23 +526,59 @@ async function enviarPorEmail(pontoObj) {
       selfieBase64: base64
     };
 
-    // USA FETCH NORMAL - O APPS SCRIPT JÁ DEVE LIDAR COM CORS
-    const res = await fetch(WEBAPP_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    const json = await res.json();
-    if (!json.success) throw new Error(json.msg);
+    // TENTA FETCH NORMALMENTE
+    try {
+      const res = await fetch(WEBAPP_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const json = await res.json();
+      if (!json.success) throw new Error(json.msg);
+      
+    } catch (fetchError) {
+      // SE FALHAR, TENTA USANDO XMLHttpRequest (MAIS COMPATÍVEL)
+      console.log('Tentando XMLHttpRequest...');
+      await enviarViaXHR(payload);
+    }
 
     showToast('Ponto enviado e registrado com sucesso!', 'success', 3000);
     return true;
+    
   } catch (err) {
     console.error('Erro ao enviar ponto:', err);
     showToast('Falha no envio: ' + err.message, 'error', 4000);
     throw err;
   }
+}
+
+// FUNÇÃO ALTERNATIVA COM XMLHttpRequest
+function enviarViaXHR(payload) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', WEBAPP_URL);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        const json = JSON.parse(xhr.responseText);
+        if (json.success) {
+          resolve(true);
+        } else {
+          reject(new Error(json.msg));
+        }
+      } else {
+        reject(new Error('Erro HTTP: ' + xhr.status));
+      }
+    };
+    
+    xhr.onerror = function() {
+      reject(new Error('Erro de conexão'));
+    };
+    
+    xhr.send(JSON.stringify(payload));
+  });
 }
 
 /* ============================
