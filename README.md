@@ -1,81 +1,81 @@
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Registro de Ponto</title>
-<!-- Forçar HTTPS para funcionamento do GPS -->
-<script>
-if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-    location.replace(`https:${location.href.substring(location.protocol.length)}`);
-}
-</script>
-<style>
-:root{--bg1:#0d47a1;--bg2:#1976d2;--white:#fff;--accent:#00c853;}
-*{box-sizing:border-box}
-body{font-family:Segoe UI,Tahoma,Verdana,sans-serif;margin:0;padding:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--white);}
-.header{width:100%;padding:12px 16px;display:flex;align-items:center;gap:12px;position:fixed;top:0;left:0;z-index:1000;}
-.header h1{margin:0;font-size:1.2rem;font-weight:800;}
-#menuBtn{font-size:1.6rem;cursor:pointer;position:fixed;top:14px;left:12px;z-index:1010;}
-#menuOptions{position:fixed;top:56px;left:12px;width:260px;background:#fff;color:#111;flex-direction:column;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.25);z-index:1005;display:none;transition:all 0.2s ease;}
-#menuOptions button{margin:6px 0;padding:8px 10px;border:none;border-radius:6px;background:#1976d2;color:#fff;font-weight:700;cursor:pointer;}
-main{margin-top:72px;width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;padding:12px;}
-.formCard{width:100%;background:rgba(255,255,255,0.06);padding:12px;border-radius:12px;backdrop-filter: blur(4px);box-shadow:0 8px 24px rgba(0,0,0,0.2);}
-.row{display:flex;gap:8px;width:100%;}
-.field{display:flex;flex-direction:column;margin-bottom:8px;}
-label{font-size:13px;font-weight:700;margin-bottom:6px;}
-input[type="text"], select, textarea {padding:10px;border-radius:8px;border:0;outline:none;font-size:14px;}
-textarea{resize:vertical;min-height:64px;}
-#relogio{font-size:1.5rem;font-weight:700;margin:8px 0 14px 0;text-align:center;}
-.botao-circular{width:160px;height:160px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#00c853,#009624);box-shadow:0 8px 24px rgba(0,0,0,.3);font-weight:800;cursor:pointer;user-select:none;position:relative;margin:12px auto;}
-.mensagem-confirmacao{margin-top:10px;font-weight:600;color:#ffeb3b;text-align:center;min-height:20px;}
-.statusBar{margin-top:10px;font-size:13px;opacity:0.95;background:rgba(255,255,255,0.06);padding:8px;border-radius:8px;display:flex;align-items:center;gap:8px;justify-content:space-between;}
-.pendentes{font-weight:700;color:#ffd54f;}
-.thumbnail{width:48px;height:48px;border-radius:6px;object-fit:cover;margin-left:8px;border:1px solid rgba(255,255,255,0.12);}
-.warn{background:#ffcc80;color:#3e2723;padding:6px;border-radius:6px;margin-top:8px;font-weight:700;text-align:center;}
-.rodape{position:fixed;bottom:12px;font-size:12px;opacity:.9;display:flex;flex-direction:column;align-items:center;gap:6px;}
-.rodape button{padding:6px 10px;border-radius:6px;border:0;background:#fff;color:var(--bg1);font-weight:700;cursor:pointer;}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <title>Registro de Ponto</title>
+    <!-- Forçar HTTPS para funcionamento do GPS -->
+    <script>
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        location.replace(`https:${location.href.substring(location.protocol.length)}`);
+    }
+    </script>
+    <style>
+    :root{--bg1:#0d47a1;--bg2:#1976d2;--white:#fff;--accent:#00c853;}
+    *{box-sizing:border-box}
+    body{font-family:Segoe UI,Tahoma,Verdana,sans-serif;margin:0;padding:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--white);}
+    .header{width:100%;padding:12px 16px;display:flex;align-items:center;gap:12px;position:fixed;top:0;left:0;z-index:1000;}
+    .header h1{margin:0;font-size:1.2rem;font-weight:800;}
+    #menuBtn{font-size:1.6rem;cursor:pointer;position:fixed;top:14px;left:12px;z-index:1010;}
+    #menuOptions{position:fixed;top:56px;left:12px;width:260px;background:#fff;color:#111;flex-direction:column;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.25);z-index:1005;display:none;transition:all 0.2s ease;}
+    #menuOptions button{margin:6px 0;padding:8px 10px;border:none;border-radius:6px;background:#1976d2;color:#fff;font-weight:700;cursor:pointer;}
+    main{margin-top:72px;width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;padding:12px;}
+    .formCard{width:100%;background:rgba(255,255,255,0.06);padding:12px;border-radius:12px;backdrop-filter: blur(4px);box-shadow:0 8px 24px rgba(0,0,0,0.2);}
+    .row{display:flex;gap:8px;width:100%;}
+    .field{display:flex;flex-direction:column;margin-bottom:8px;}
+    label{font-size:13px;font-weight:700;margin-bottom:6px;}
+    input[type="text"], select, textarea {padding:10px;border-radius:8px;border:0;outline:none;font-size:14px;}
+    textarea{resize:vertical;min-height:64px;}
+    #relogio{font-size:1.5rem;font-weight:700;margin:8px 0 14px 0;text-align:center;}
+    .botao-circular{width:160px;height:160px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#00c853,#009624);box-shadow:0 8px 24px rgba(0,0,0,.3);font-weight:800;cursor:pointer;user-select:none;position:relative;margin:12px auto;}
+    .mensagem-confirmacao{margin-top:10px;font-weight:600;color:#ffeb3b;text-align:center;min-height:20px;}
+    .statusBar{margin-top:10px;font-size:13px;opacity:0.95;background:rgba(255,255,255,0.06);padding:8px;border-radius:8px;display:flex;align-items:center;gap:8px;justify-content:space-between;}
+    .pendentes{font-weight:700;color:#ffd54f;}
+    .thumbnail{width:48px;height:48px;border-radius:6px;object-fit:cover;margin-left:8px;border:1px solid rgba(255,255,255,0.12);}
+    .warn{background:#ffcc80;color:#3e2723;padding:6px;border-radius:6px;margin-top:8px;font-weight:700;text-align:center;}
+    .rodape{position:fixed;bottom:12px;font-size:12px;opacity:.9;display:flex;flex-direction:column;align-items:center;gap:6px;}
+    .rodape button{padding:6px 10px;border-radius:6px;border:0;background:#fff;color:var(--bg1);font-weight:700;cursor:pointer;}
 
-/* Toast */
-#toastContainer{position:fixed;top:16px;right:16px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
-.toast{min-width:220px;padding:10px 14px;border-radius:8px;color:#fff;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,0.25);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:all .28s ease}
-.toast.show{opacity:1;transform:translateY(0);}
-.toast.success{background:linear-gradient(90deg,#2e7d32,#00c853);}
-.toast.info{background:linear-gradient(90deg,#1976d2,#42a5f5);}
-.toast.error{background:linear-gradient(90deg,#c62828,#ff7043);}
+    /* Toast */
+    #toastContainer{position:fixed;top:16px;right:16px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+    .toast{min-width:220px;padding:10px 14px;border-radius:8px;color:#fff;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,0.25);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:all .28s ease}
+    .toast.show{opacity:1;transform:translateY(0);}
+    .toast.success{background:linear-gradient(90deg,#2e7d32,#00c853);}
+    .toast.info{background:linear-gradient(90deg,#1976d2,#42a5f5);}
+    .toast.error{background:linear-gradient(90deg,#c62828,#ff7043);}
 
-/* Modal Câmera */
-#modalCamera{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:3000;flex-direction:column;align-items:center;justify-content:center;}
-#videoCamera{width:100%;max-width:400px;height:auto;border-radius:10px;}
-#capturarFotoBtn{position:fixed;bottom:50px;width:80px;height:80px;border-radius:50%;background:#fff;border:4px solid #00c853;cursor:pointer;}
-#fecharCameraBtn{position:fixed;top:20px;right:20px;background:rgba(255,255,255,0.2);color:white;border:none;border-radius:50%;width:50px;height:50px;font-size:20px;cursor:pointer;}
+    /* Modal Câmera */
+    #modalCamera{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:3000;flex-direction:column;align-items:center;justify-content:center;}
+    #videoCamera{width:100%;max-width:400px;height:auto;border-radius:10px;}
+    #capturarFotoBtn{position:fixed;bottom:50px;width:80px;height:80px;border-radius:50%;background:#fff;border:4px solid #00c853;cursor:pointer;}
+    #fecharCameraBtn{position:fixed;top:20px;right:20px;background:rgba(255,255,255,0.2);color:white;border:none;border-radius:50%;width:50px;height:50px;font-size:20px;cursor:pointer;}
 
-/* Novos estilos para GPS */
-.botao-circular:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
+    /* Novos estilos para GPS */
+    .botao-circular:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
 
-.botao-circular.processing {
-    background: linear-gradient(145deg, #ff9800, #f57c00);
-    animation: pulse 1.5s infinite;
-}
+    .botao-circular.processing {
+        background: linear-gradient(145deg, #ff9800, #f57c00);
+        animation: pulse 1.5s infinite;
+    }
 
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.7; }
-    100% { opacity: 1; }
-}
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
 
-/* Tela de cadastro */
-#telaCadastro{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,var(--bg1),var(--bg2));z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;}
-.cadastroCard{width:100%;max-width:400px;background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;backdrop-filter: blur(10px);}
+    /* Tela de cadastro */
+    #telaCadastro{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,var(--bg1),var(--bg2));z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;}
+    .cadastroCard{width:100%;max-width:400px;background:rgba(255,255,255,0.1);padding:20px;border-radius:12px;backdrop-filter: blur(10px);}
 
-/* small screens adjustments */
-@media (max-width:420px){
-  .row{flex-direction:column;}
-  .botao-circular{width:140px;height:140px;}
-}
-</style>
+    /* small screens adjustments */
+    @media (max-width:420px){
+      .row{flex-direction:column;}
+      .botao-circular{width:140px;height:140px;}
+    }
+    </style>
 </head>
 <body>
 
@@ -183,9 +183,10 @@ textarea{resize:vertical;min-height:64px;}
 
 <script>
 /* ============================
-   CONFIGURAÇÃO DE EMAIL
+   CONFIGURAÇÃO DO WEBAPP
    ============================ */
-const EMAIL_DESTINO = 'pontocbh@gmail.com';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbz97yqwIwPyBrSckAYDsXvEUqsIuRzScz3pYeaVJBA5M7ffccCVSbbZ-KuX6ZysREt-/exec';
+const WEBAPP_SECRET = 'Pontobh#4'; // mesmo do Apps Script
 
 /* ============================
    Variáveis e elementos
@@ -194,7 +195,7 @@ const KEY_PONTOS_DIA = 'pontosDia_v11';
 const KEY_CADASTRO = 'cadastroUsuario_v2';
 const DB_NAME = 'PontoCBH_DB';
 const DB_STORE = 'pendingPoints';
-const TEMPO_MINIMO_ENTRE_PONTOS = 90 * 60 * 1000;
+const TEMPO_MINIMO_ENTRE_PONTOS = 0; // 0 segundos entre pontos
 
 const nomeUsuarioEl = document.getElementById('nomeUsuario');
 const cargoUsuarioEl = document.getElementById('cargoUsuario');
@@ -504,58 +505,43 @@ window.addEventListener('online', () => {
 });
 
 /* ============================
-   ENVIO POR EMAIL SIMPLES E CONFIÁVEL
+   ENVIO PARA WEB APP (Google Apps Script)
    ============================ */
 async function enviarPorEmail(pontoObj) {
-    return new Promise((resolve, reject) => {
-        try {
-            // Prepara o assunto do email
-            const assunto = `Ponto Registrado - ${pontoObj.nome} - ${pontoObj.data} ${pontoObj.hora}`;
-            
-            // Prepara o corpo do email com todos os dados
-            let corpo = `REGISTRO DE PONTO - SISTEMA LCSoftware\n\n`;
-            corpo += `👤 COLABORADOR:\n`;
-            corpo += `Nome: ${pontoObj.nome}\n`;
-            corpo += `Cargo: ${pontoObj.cargo}\n`;
-            corpo += `Telefone: ${pontoObj.telefone}\n\n`;
-            
-            corpo += `📅 PONTO REGISTRADO:\n`;
-            corpo += `Tipo: ${pontoObj.tipo}\n`;
-            corpo += `Número: ${pontoObj.numero}/8\n`;
-            corpo += `Data: ${pontoObj.data}\n`;
-            corpo += `Hora: ${pontoObj.hora}\n\n`;
-            
-            corpo += `📍 LOCALIZAÇÃO:\n`;
-            corpo += `Coordenadas: ${pontoObj.localizacao.latitude.toFixed(6)}, ${pontoObj.localizacao.longitude.toFixed(6)}\n`;
-            corpo += `Precisão: ±${pontoObj.localizacao.accuracy}m\n\n`;
-            
-            if (pontoObj.observacoes) {
-                corpo += `📝 OBSERVAÇÕES:\n${pontoObj.observacoes}\n\n`;
-            }
-            
-            corpo += `---\n`;
-            corpo += `Selfie salva localmente no dispositivo\n`;
-            corpo += `Enviado via Sistema de Ponto LCSoftware\n`;
-            corpo += `Timestamp: ${pontoObj.timestamp}`;
+  try {
+    const base64 = await blobToDataURL(pontoObj.fotoBlob);
 
-            // Cria URL mailto - MÉTODO MAIS CONFIÁVEL
-            const mailtoUrl = `mailto:${EMAIL_DESTINO}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-            
-            // Abre o cliente de email
-            window.location.href = mailtoUrl;
-            
-            showToast('Abra o app de email para enviar', 'info', 4000);
-            
-            // Considera como sucesso pois o usuário vai enviar manualmente
-            setTimeout(() => {
-                resolve(true);
-            }, 2000);
-            
-        } catch (error) {
-            console.error('Erro ao preparar email:', error);
-            reject(new Error('Falha ao preparar envio por email'));
-        }
+    const payload = {
+      secret: WEBAPP_SECRET,
+      nome: pontoObj.nome,
+      cargo: pontoObj.cargo,
+      telefone: pontoObj.telefone,
+      tipo: pontoObj.tipo,
+      numero: pontoObj.numero,
+      data: pontoObj.data,
+      hora: pontoObj.hora,
+      observacoes: pontoObj.observacoes,
+      localizacao: pontoObj.localizacao,
+      deviceId: pontoObj._id,
+      selfieBase64: base64
+    };
+
+    const res = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' }
     });
+
+    const json = await res.json();
+    if (!json.success) throw new Error(json.msg);
+
+    showToast('Ponto enviado e registrado com sucesso!', 'success', 3000);
+    return true;
+  } catch (err) {
+    console.error('Erro ao enviar ponto:', err);
+    showToast('Falha no envio: ' + err.message, 'error', 4000);
+    throw err;
+  }
 }
 
 /* ============================
@@ -582,7 +568,7 @@ setInterval(atualizarRelogio,1000);
 atualizarRelogio();
 
 /* ============================
-   Sistema de tempo entre pontos (1h30min)
+   Sistema de tempo entre pontos (0 segundos)
    ============================ */
 function verificarUltimoPonto() {
     const hoje = new Date().toLocaleDateString('pt-BR');
@@ -783,7 +769,7 @@ async function processarSelfie(file, pos, prox) {
         ultimoPontoTimestamp = agora.getTime();
         iniciarContadorTempo();
 
-        // ENVIO POR EMAIL
+        // ENVIO PARA WEB APP
         mensagemConfirmacao.textContent = 'Preparando envio do ponto...';
         
         if(navigator.onLine){
