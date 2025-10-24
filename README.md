@@ -229,7 +229,7 @@
 // ============================
 // CONFIGURAÇÃO DO WEBAPP
 // ============================
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw4hCQspE-2IyYFXQLKlCMTez7bKT2ztV5XJvFrmd68tSkuT7pKvtXWxkKMhwA05h4EOA/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwjWH6lr0_jOyBL2u8oRgr630XVcC9eKrOIdQp0m1V74ZB9xoImy3Tdc7_5MdMSSwI8_A/exec';
 const WEBAPP_SECRET = 'Pontobh#4';
 
 // ============================
@@ -655,38 +655,51 @@ async function enviarParaWebApp(pontoObj) {
         statusEnvioEl.textContent = 'Enviando...';
         statusEnvioEl.style.color = '#ff9800';
         
+        // Converter blob para base64
         const base64 = await blobToDataURL(pontoObj.fotoBlob);
 
+        // Preparar payload CORRETO
         const payload = {
             secret: WEBAPP_SECRET,
             nome: pontoObj.nome,
             cargo: pontoObj.cargo,
-            telefone: pontoObj.telefone,
+            telefone: pontoObj.telefone, // Usar telefone sem formatação
             tipo: pontoObj.tipo,
             numero: pontoObj.numero,
             data: pontoObj.data,
             hora: pontoObj.hora,
             observacoes: pontoObj.observacoes,
-            localizacao: pontoObj.localizacao,
+            localizacao: {
+                latitude: pontoObj.localizacao.latitude,
+                longitude: pontoObj.localizacao.longitude,
+                accuracy: pontoObj.localizacao.accuracy
+            },
             deviceId: pontoObj._id,
             selfieBase64: base64
         };
 
         console.log('Enviando para WebApp:', payload);
 
+        // Fazer requisição com timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
+
         const response = await fetch(WEBAPP_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
             headers: { 
                 'Content-Type': 'application/json'
-            }
+            },
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         const result = await response.json();
         console.log('Resposta do WebApp:', result);
         
         if (result.success) {
-            showToast('Ponto enviado para planilha!', 'success', 3000);
+            showToast('✅ Ponto enviado para planilha!', 'success', 3000);
             return true;
         } else {
             throw new Error(result.msg || 'Erro desconhecido do WebApp');
@@ -695,9 +708,10 @@ async function enviarParaWebApp(pontoObj) {
     } catch (error) {
         console.error('Erro ao enviar para WebApp:', error);
         
-        // Se for erro de rede, salva como pendente
-        if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
-            throw new Error('SEM_CONEXAO');
+        if (error.name === 'AbortError') {
+            throw new Error('SEM_CONEXAO: Timeout na conexão');
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+            throw new Error('SEM_CONEXAO: Sem conexão com internet');
         } else {
             throw new Error('ERRO_ENVIO: ' + error.message);
         }
@@ -714,23 +728,26 @@ async function sincronizarPendentes() {
     }
 
     if (!navigator.onLine) {
-        showToast('Sem conexão com internet', 'error', 3000);
+        showToast('📵 Sem conexão com internet', 'error', 3000);
         return;
     }
 
-    infoSync.innerHTML = '<strong>Sincronizando pontos pendentes...</strong>';
+    infoSync.innerHTML = '<strong>🔄 Sincronizando pontos pendentes...</strong>';
+    botao.disabled = true;
     
     let sucessos = 0;
     let erros = 0;
+    const pontosParaRemover = [];
 
-    for (let i = pontosPendentes.length - 1; i >= 0; i--) {
+    for (let i = 0; i < pontosPendentes.length; i++) {
         const ponto = pontosPendentes[i];
         
         try {
+            console.log(`Sincronizando ponto ${i + 1}/${pontosPendentes.length}:`, ponto.tipo);
             await enviarParaWebApp(ponto);
             
-            // Remove da lista de pendentes
-            pontosPendentes.splice(i, 1);
+            // Marcar para remover
+            pontosParaRemover.push(ponto._id);
             sucessos++;
             
             // Atualiza o ponto na lista principal
@@ -739,15 +756,15 @@ async function sincronizarPendentes() {
                 pontosDia[pontoIndex].enviado = true;
             }
             
-            showToast(`Ponto ${ponto.tipo} sincronizado!`, 'success', 2000);
+            showToast(`✅ ${ponto.tipo} sincronizado!`, 'success', 2000);
             
         } catch (error) {
-            console.error(`Erro ao sincronizar ponto ${ponto._id}:`, error);
+            console.error(`❌ Erro ao sincronizar ponto ${ponto._id}:`, error);
             erros++;
             
             if (!error.message.includes('SEM_CONEXAO')) {
-                // Se não for erro de conexão, remove da lista de pendentes
-                pontosPendentes.splice(i, 1);
+                // Se não for erro de conexão, marca para remover
+                pontosParaRemover.push(ponto._id);
             }
         }
         
@@ -755,18 +772,26 @@ async function sincronizarPendentes() {
         await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
+    // Remover pontos processados da lista de pendentes
+    pontosPendentes = pontosPendentes.filter(p => !pontosParaRemover.includes(p._id));
+
     // Salvar alterações
     localStorage.setItem(KEY_PONTOS_DIA, JSON.stringify(pontosDia));
     localStorage.setItem(KEY_PENDENTES, JSON.stringify(pontosPendentes));
     
     atualizarVisualizacaoResumo();
     atualizarStatusEnvio();
+    botao.disabled = false;
     
     if (sucessos > 0) {
-        showToast(`${sucessos} ponto(s) sincronizado(s) com sucesso!`, 'success', 4000);
+        showToast(`🎉 ${sucessos} ponto(s) sincronizado(s) com sucesso!`, 'success', 5000);
     }
     if (erros > 0) {
-        showToast(`${erros} ponto(s) com erro na sincronização`, 'error', 4000);
+        showToast(`⚠️ ${erros} ponto(s) falharam na sincronização`, 'warning', 5000);
+    }
+    
+    if (pontosPendentes.length === 0) {
+        infoSync.style.display = 'none';
     }
 }
 
